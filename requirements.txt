@@ -1,0 +1,17 @@
+# Core
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+sqlalchemy
+python-multipart
+
+# ISL model serving
+numpy
+scikit-learn            # needed to unpickle the upstream KMeans/SVM models
+opencv-contrib-python   # NOTE: SURF requires a non-free OpenCV build; see README
+
+# Optional — uncomment when you actually need them
+# celery
+# redis
+# psycopg2-binary       # Postgres driver (NeonDB)

@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+app.db
+ml_models/*.sav
+
+# Editor config
+.vscode/
+.idea/
