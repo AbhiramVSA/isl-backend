@@ -1,61 +1,117 @@
-"""Inference pipeline ported from
-https://github.com/Karthikeyu/Indian-sign-language-recognition
-(recogniseGesture.py + imagePreprocessingUtils.py).
+"""Word-level ISL recognition ported from
+https://github.com/Sooryak12/Indian-Sign-Language-Recognition
+(app.py + helper_functions.py).
 
-Pipeline: skin mask + Canny edges -> SURF descriptors -> KMeans visual
-words -> bag-of-visual-words histogram -> SVM classification.
+Pipeline: video -> 45 evenly sampled frames -> MediaPipe Holistic
+keypoints (pose + both hands, 258 features per frame) -> stacked LSTM
+-> predicted word.
 """
 
-import pickle
+import os
+import tempfile
 
 import cv2
+import mediapipe as mp
 import numpy as np
+import skvideo.io
 
-# Upstream labels come from the sorted data/ directory names: digits 1-9, then A-Z.
-CLASS_LABELS = [str(d) for d in range(1, 10)] + [chr(c) for c in range(ord("A"), ord("Z") + 1)]
+ACTIONS = ["Hello", "How are you", "thank you"]
+SEQUENCE_LENGTH = 45
+N_FEATURES = 258  # 33*4 pose + 21*3 left hand + 21*3 right hand landmarks
 
-N_CLASSES = 35
-CLUSTER_FACTOR = 8
-IMG_SIZE = 128
+ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov"}
+
+
+def _build_model():
+    from tensorflow.keras.layers import LSTM, Dense
+    from tensorflow.keras.models import Sequential
+
+    model = Sequential()
+    model.add(
+        LSTM(64, return_sequences=True, activation="relu",
+             input_shape=(SEQUENCE_LENGTH, N_FEATURES))
+    )
+    model.add(LSTM(128, return_sequences=True, activation="relu"))
+    model.add(LSTM(256, return_sequences=True, activation="relu"))
+    model.add(LSTM(64, return_sequences=False, activation="relu"))
+    model.add(Dense(64, activation="relu"))
+    model.add(Dense(32, activation="relu"))
+    model.add(Dense(len(ACTIONS), activation="softmax"))
+    return model
 
 
 class ISLRecognizer:
-    def __init__(self, kmeans_path: str, svm_path: str):
-        with open(kmeans_path, "rb") as f:
-            self.kmeans = pickle.load(f)
-        with open(svm_path, "rb") as f:
-            self.svm = pickle.load(f)
-        # SURF is patented: only available in OpenCV builds with non-free
-        # algorithms enabled (see README). Fail fast if it isn't.
-        self.surf = cv2.xfeatures2d.SURF_create()
+    def __init__(self, weights_path: str):
+        if not os.path.exists(weights_path):
+            raise FileNotFoundError(f"LSTM weights not found at {weights_path}")
+        self.model = _build_model()
+        self.model.load_weights(weights_path)
 
-    def predict(self, image_bytes: bytes) -> str:
-        image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
-        if image is None:
-            raise ValueError("Could not decode image.")
-        image = cv2.resize(image, (IMG_SIZE, IMG_SIZE))
-        edges = self._canny_edges(image)
-        descriptors = self._surf_descriptors(edges)
-        if descriptors is None:
-            raise ValueError("No SURF descriptors found in image (is a hand gesture visible?).")
-        visual_words = self.kmeans.predict(descriptors)
-        histogram = np.bincount(visual_words, minlength=N_CLASSES * CLUSTER_FACTOR)
-        prediction = self.svm.predict([histogram])
-        return CLASS_LABELS[prediction[0]]
+    def predict(self, video_bytes: bytes, suffix: str) -> str:
+        # MediaPipe/skvideo read from disk, so spill the upload to a temp file.
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(video_bytes)
+            path = tmp.name
+        try:
+            sequence = self._video_to_keypoint_sequence(path)
+        finally:
+            os.remove(path)
+        probabilities = self.model.predict(np.expand_dims(sequence, axis=0), verbose=0)
+        return ACTIONS[int(np.argmax(probabilities))]
+
+    def _video_to_keypoint_sequence(self, path: str) -> np.ndarray:
+        try:
+            frames = skvideo.io.vread(path)
+        except Exception as exc:
+            raise ValueError(f"Could not decode video: {exc}")
+        n_frames = len(frames)
+        if n_frames == 0:
+            raise ValueError("Video contains no frames.")
+
+        sequence = []
+        holistic_cls = mp.solutions.holistic.Holistic
+        with holistic_cls(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
+            if n_frames >= SEQUENCE_LENGTH:
+                # Evenly sample SEQUENCE_LENGTH frames across the whole video.
+                for i in range(SEQUENCE_LENGTH):
+                    frame = frames[round(n_frames / SEQUENCE_LENGTH * i)]
+                    sequence.append(self._extract_keypoints(frame, holistic))
+            else:
+                for frame in frames:
+                    sequence.append(self._extract_keypoints(frame, holistic))
+                # Zero-pad short videos to keep the input shape fixed.
+                sequence.extend(
+                    np.zeros(N_FEATURES) for _ in range(SEQUENCE_LENGTH - n_frames)
+                )
+        return np.array(sequence)
 
     @staticmethod
-    def _canny_edges(image: np.ndarray) -> np.ndarray:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        lower = np.array([0, 40, 30], dtype="uint8")
-        upper = np.array([43, 255, 254], dtype="uint8")
-        skin_mask = cv2.inRange(hsv, lower, upper)
-        skin_mask = cv2.addWeighted(skin_mask, 0.5, skin_mask, 0.5, 0.0)
-        skin_mask = cv2.medianBlur(skin_mask, 5)
-        skin = cv2.bitwise_and(gray, gray, mask=skin_mask)
-        return cv2.Canny(skin, 60, 60)
+    def _extract_keypoints(frame: np.ndarray, holistic) -> np.ndarray:
+        # Upstream reads frames with skvideo (RGB) and still applies BGR2RGB
+        # before MediaPipe; the swap is kept so inference matches training.
+        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        image.flags.writeable = False
+        results = holistic.process(image)
 
-    def _surf_descriptors(self, edges: np.ndarray):
-        edges = cv2.resize(edges, (256, 256))
-        _, descriptors = self.surf.detectAndCompute(edges, None)
-        return descriptors
+        pose = (
+            np.array(
+                [[lm.x, lm.y, lm.z, lm.visibility] for lm in results.pose_landmarks.landmark]
+            ).flatten()
+            if results.pose_landmarks
+            else np.zeros(33 * 4)
+        )
+        lh = (
+            np.array(
+                [[lm.x, lm.y, lm.z] for lm in results.left_hand_landmarks.landmark]
+            ).flatten()
+            if results.left_hand_landmarks
+            else np.zeros(21 * 3)
+        )
+        rh = (
+            np.array(
+                [[lm.x, lm.y, lm.z] for lm in results.right_hand_landmarks.landmark]
+            ).flatten()
+            if results.right_hand_landmarks
+            else np.zeros(21 * 3)
+        )
+        return np.concatenate([pose, lh, rh])

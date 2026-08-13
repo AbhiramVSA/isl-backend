@@ -7,9 +7,13 @@ sqlalchemy
 python-multipart
 
 # ISL model serving
-numpy
-scikit-learn            # needed to unpickle the upstream KMeans/SVM models
-opencv-contrib-python   # NOTE: SURF requires a non-free OpenCV build; see README
+# Upstream trained on tensorflow 2.13, but its typing-extensions pin conflicts
+# with pydantic v2; 2.15 is the closest Keras-2 release that coexists with it.
+tensorflow==2.15.1
+mediapipe==0.10.2
+sk-video==1.1.10
+scipy
+numpy<2
 
 # Optional — uncomment when you actually need them
 # celery

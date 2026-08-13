@@ -16,9 +16,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.isl import ISLRecognizer
 
-        app.state.recognizer = ISLRecognizer(
-            settings.kmeans_model_path, settings.svm_model_path
-        )
+        app.state.recognizer = ISLRecognizer(settings.lstm_weights_path)
     except Exception as exc:
         app.state.recognizer_error = str(exc)
     yield

@@ -7,8 +7,7 @@ class Settings(BaseSettings):
     app_name: str = "ISL Recognition API"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./app.db"
-    kmeans_model_path: str = "ml_models/mini_kmeans_model.sav"
-    svm_model_path: str = "ml_models/svm_model.sav"
+    lstm_weights_path: str = "ml_models/170-0.83.hdf5"
 
 
 settings = Settings()

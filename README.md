@@ -1,11 +1,11 @@
 # ISL Recognition API
 
-FastAPI backend serving the Indian Sign Language gesture classifier from
-[Karthikeyu/Indian-sign-language-recognition](https://github.com/Karthikeyu/Indian-sign-language-recognition).
+FastAPI backend serving the word-level Indian Sign Language recognizer from
+[Sooryak12/Indian-Sign-Language-Recognition](https://github.com/Sooryak12/Indian-Sign-Language-Recognition).
 
-> **Note on the model:** the upstream repo does **not** contain an LSTM. Its classifier is a
-> classic-CV pipeline — SURF descriptors → KMeans bag-of-visual-words → SVM — shipped as two
-> pickles (`mini_kmeans_model.sav`, `svm_model.sav`). That is what `/api/v1/predict` serves.
+A short video (2–3 s) of a sign is uploaded, 45 frames are sampled evenly across it,
+MediaPipe Holistic extracts pose + hand landmarks (258 features per frame), and a stacked
+LSTM classifies the sequence into one of three words: **Hello**, **How are you**, **thank you**.
 
 ## Layout
 
@@ -28,21 +28,22 @@ app/
   services/
     isl.py             # inference pipeline ported from the upstream repo
 tests/
-ml_models/             # put the two .sav files here (gitignored)
+ml_models/             # put the LSTM weights here (gitignored)
 ```
 
 ## Setup
+
+Python 3.9–3.11 (TensorFlow 2.15 has no wheels for 3.12+). `ffmpeg` must be on the PATH
+(sk-video shells out to it to decode uploads).
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # optional, defaults work
 
-# Download the trained models (~90 MB total)
-curl -L -o ml_models/mini_kmeans_model.sav \
-  https://raw.githubusercontent.com/Karthikeyu/Indian-sign-language-recognition/master/mini_kmeans_model.sav
-curl -L -o ml_models/svm_model.sav \
-  https://raw.githubusercontent.com/Karthikeyu/Indian-sign-language-recognition/master/svm_model.sav
+# Download the trained LSTM weights (~2.7 MB)
+curl -L -o ml_models/170-0.83.hdf5 \
+  "https://raw.githubusercontent.com/Sooryak12/Indian-Sign-Language-Recognition/pycode/lstm-model/170-0.83.hdf5"
 ```
 
 ## Run
@@ -52,32 +53,28 @@ uvicorn app.main:app --reload
 ```
 
 - `GET /health` — reports whether the model loaded (and the error if it didn't)
-- `POST /api/v1/predict` — multipart upload of a hand-gesture image, returns one of 35 labels (`1`–`9`, `A`–`Z`)
+- `POST /api/v1/predict` — multipart upload of a short sign video (`.mp4`, `.avi`, `.mov`),
+  returns the predicted word
 
 ```bash
-curl -F "file=@gesture.jpg" http://localhost:8000/api/v1/predict
-# {"label": "A"}
+curl -F "file=@hello.mp4" http://localhost:8000/api/v1/predict
+# {"label": "Hello"}
 ```
 
-The image should be a fairly tight crop of the hand gesture (upstream used a ~300×325 px
-camera ROI); it is resized to 128×128 before feature extraction.
+Videos shorter than 45 frames are zero-padded; longer ones are downsampled to 45 evenly
+spaced frames, so any clip of roughly 2–5 seconds works.
 
-## Known caveats (inherited from upstream)
+## Notes
 
-1. **SURF is patented and disabled in modern OpenCV wheels.** `pip install opencv-contrib-python`
-   ships without non-free algorithms, so `cv2.xfeatures2d.SURF_create()` raises an error.
-   Options:
-   - Build OpenCV from source with `OPENCV_ENABLE_NONFREE=ON`, or
-   - Use the last pre-patent-enforcement wheels (`opencv-contrib-python==3.4.2.16`), which
-     require Python ≤ 3.7 — and correspondingly older FastAPI/Pydantic pins.
-
-   The API starts either way; `/api/v1/predict` returns 503 with the load error until SURF and
-   the model files are available. SIFT is *not* a drop-in replacement (128-dim descriptors vs
-   the 64-dim SURF descriptors the KMeans model was trained on).
-
-2. **The pickles were created with an old scikit-learn** (upstream targets Python 2.7-era
-   tooling and pins no version). If unpickling fails or warns, try older `scikit-learn` pins
-   (e.g. `0.24.x`).
+- The checkpoint (`170-0.83.hdf5`) is weights-only; the layer stack is rebuilt in
+  `app/services/isl.py` and must stay in sync with the upstream architecture
+  (LSTM 64→128→256→64, Dense 64→32→3).
+- Inference is CPU-friendly (~2.7 MB model) but MediaPipe processing of 45 frames takes a
+  few seconds per request. The endpoint is sync (`def`), so FastAPI runs it in its
+  threadpool without blocking the event loop.
+- Upstream pinned `tensorflow==2.13`, which cannot share an environment with pydantic v2
+  (conflicting `typing-extensions` pins); `requirements.txt` pins 2.15.1 instead, the last
+  Keras-2 release. The weights load unchanged.
 
 ## Not wired up yet (on purpose)
 
