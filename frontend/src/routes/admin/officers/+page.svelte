@@ -1,0 +1,3 @@
+<script lang="ts">import { onMount } from 'svelte';import { api } from '$lib/api/client';import type { Officer } from '$lib/types';let officers=$state<Officer[]>([]);let error=$state('');onMount(async()=>{try{officers=await api('/admin/officers')}catch(e){error=e instanceof Error?e.message:'Officers are unavailable.'}});</script>
+<div class="page-head"><div><p class="eyebrow">Administration</p><h1>Officers</h1></div></div>{#if error}<div class="error">{error}</div>{:else}<div class="admin-list">{#each officers as officer}<section class="panel"><h2>{officer.name}</h2><p>{officer.rank??'Officer'} · Badge {officer.badge_number}</p></section>{/each}</div>{/if}<style>.admin-list{display:grid;gap:.7rem}.panel h2,.panel p{margin:.2rem 0}.panel p{color:var(--muted)}</style>
+

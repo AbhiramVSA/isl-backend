@@ -1,0 +1,3 @@
+<script lang="ts">import { onMount } from 'svelte';import { api } from '$lib/api/client';import ReportCard from '$lib/components/ReportCard.svelte';import type { Report } from '$lib/types';let reports=$state<Report[]>([]);let error=$state('');onMount(async()=>{try{reports=await api('/admin/reports')}catch(e){error=e instanceof Error?e.message:'Reports are unavailable.'}});</script>
+<div class="page-head"><div><p class="eyebrow">Administration</p><h1>All Reports</h1></div></div>{#if error}<div class="error">{error}</div>{:else}<div class="list">{#each reports as report}<ReportCard {report}/>{/each}</div>{/if}<style>.list{display:grid;gap:.7rem}</style>
+

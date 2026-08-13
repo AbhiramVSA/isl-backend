@@ -1,0 +1,23 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports: ["6379:6379"]
+    volumes: ["redis-data:/data"]
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml --bind 0.0.0.0
+    ports: ["7880:7880", "7881:7881", "7882:7882/udp"]
+    volumes: ["./livekit.yaml:/etc/livekit.yaml:ro"]
+    depends_on: [redis]
+  egress:
+    image: livekit/egress:latest
+    cap_add: [SYS_ADMIN]
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+    volumes:
+      - ./egress.yaml:/etc/egress.yaml:ro
+      - ./backend/recordings:/out
+    depends_on: [redis, livekit]
+volumes:
+  redis-data:

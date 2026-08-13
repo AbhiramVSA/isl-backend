@@ -1,0 +1,10 @@
+{
+  "name": "Sign Response for Officers",
+  "short_name": "Sign Response",
+  "description": "Officer response for deaf and hard-of-hearing people",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f4f6f7",
+  "theme_color": "#153b50",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
