@@ -6,9 +6,17 @@ pydantic-settings
 sqlalchemy
 python-multipart
 
+# Auth + outbound HTTP (report storage, station lookup, NIM proxy)
+pyjwt
+bcrypt
+httpx
+
 # ISL model serving
 # Upstream trained on tensorflow 2.13, but its typing-extensions pin conflicts
 # with pydantic v2; 2.15 is the closest Keras-2 release that coexists with it.
+# These are the only reason the service needs Python 3.9-3.11. Everything else
+# (auth, reports, stations, the LLM proxy) runs on any modern Python — see
+# requirements-api.txt if you only want the API half.
 tensorflow==2.15.1
 mediapipe==0.10.2
 sk-video==1.1.10

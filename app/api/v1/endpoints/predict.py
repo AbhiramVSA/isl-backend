@@ -3,7 +3,7 @@ import os
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 
 from app.schemas import PredictionResponse
-from app.services.isl import ALLOWED_EXTENSIONS
+from app.core.media import ALLOWED_VIDEO_EXTENSIONS
 
 router = APIRouter()
 
@@ -17,10 +17,10 @@ def predict(request: Request, file: UploadFile):
             detail=f"Model not loaded: {request.app.state.recognizer_error}",
         )
     suffix = os.path.splitext(file.filename or "")[1].lower()
-    if suffix not in ALLOWED_EXTENSIONS:
+    if suffix not in ALLOWED_VIDEO_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported video format {suffix!r}; expected one of {sorted(ALLOWED_EXTENSIONS)}",
+            detail=f"Unsupported video format {suffix!r}; expected one of {sorted(ALLOWED_VIDEO_EXTENSIONS)}",
         )
     try:
         label = recognizer.predict(file.file.read(), suffix)
