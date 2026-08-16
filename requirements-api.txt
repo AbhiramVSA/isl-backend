@@ -1,0 +1,20 @@
+# Everything except the sign-recognition stack.
+#
+# TensorFlow and MediaPipe pin the whole service to Python 3.9-3.11. If you are
+# working on auth, reports, stations or the LLM proxy, install this instead and
+# run on any modern Python — /predict will report itself as unavailable through
+# /health, and nothing else is affected.
+
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+sqlalchemy
+python-multipart
+
+pyjwt
+bcrypt
+httpx
+
+# Tests
+pytest
