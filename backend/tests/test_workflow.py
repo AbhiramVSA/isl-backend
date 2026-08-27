@@ -1,8 +1,10 @@
 from conftest import auth
 
+from sqlalchemy import select
+
 from app.core.security import hash_password
 from app.main import rate_windows
-from app.models import Account, Office, OfficeMembership, Officer, Role
+from app.models import Account, Office, OfficeMembership, Officer, Report, ReportHistory, Role
 from app.services.reports import determine_priority
 
 
@@ -120,7 +122,20 @@ async def test_complete_authenticated_workflow(client, db):
     officer_token = await officer_login(client)
     queue = await client.get("/api/v1/officer/reports", headers=auth(officer_token))
     assert queue.status_code == 200 and queue.json()["total"] == 1
+    assert queue.json()["items"][0]["transcript_available"] is False
     report_id = report["public_id"]
+    stored_report = await db.scalar(select(Report).where(Report.public_id == report_id))
+    db.add(
+        ReportHistory(
+            report_id=stored_report.id,
+            actor_type="SYSTEM",
+            event="SIGN_TRANSCRIBED",
+            event_metadata={"transcript": "HELP"},
+        )
+    )
+    await db.commit()
+    queue = await client.get("/api/v1/officer/reports", headers=auth(officer_token))
+    assert queue.json()["items"][0]["transcript_available"] is True
     reporter = await client.get(
         f"/api/v1/officer/reports/{report_id}/reporter", headers=auth(officer_token)
     )

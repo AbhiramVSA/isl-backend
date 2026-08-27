@@ -48,4 +48,10 @@ interface ApiService {
         @Path("id") reportId: String,
         @Header("Authorization") authorization: String,
     ): StreamState
+
+    @POST("reports/{id}/transcription")
+    suspend fun transcribeRecording(
+        @Path("id") reportId: String,
+        @Header("Authorization") authorization: String,
+    ): SignTranscription
 }

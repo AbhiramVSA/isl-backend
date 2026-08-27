@@ -6,7 +6,16 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, auth, officer_reports, offices, reports, streams, websocket
+from app.api import (
+    admin,
+    auth,
+    officer_reports,
+    offices,
+    reports,
+    streams,
+    transcription,
+    websocket,
+)
 from app.core.config import settings
 from app.db import Base, engine
 
@@ -84,6 +93,7 @@ for api_router in (
     officer_reports.router,
     offices.router,
     streams.router,
+    transcription.router,
     admin.router,
     websocket.router,
 ):

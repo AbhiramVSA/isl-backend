@@ -16,12 +16,16 @@ import io.livekit.android.renderer.SurfaceViewRenderer
 
 data class AppUiState(
     val signedIn: Boolean = false,
+    val debugLoginAvailable: Boolean = false,
     val loading: Boolean = false,
     val message: String? = null,
     val error: String? = null,
     val submittedReport: Report? = null,
     val streaming: Boolean = false,
     val recording: Boolean = false,
+    val recordingAvailable: Boolean = false,
+    val transcribing: Boolean = false,
+    val transcript: String? = null,
     val profile: Identity? = null,
     val reports: List<Report> = emptyList(),
 )
@@ -29,7 +33,13 @@ data class AppUiState(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ReportRepository(session = SessionStore(application))
     private val videoPublisher = LiveVideoPublisher(application)
-    private val _state = MutableStateFlow(AppUiState(signedIn = repository.signedIn()))
+    private val _state = MutableStateFlow(
+        AppUiState(
+            signedIn = repository.signedIn(),
+            debugLoginAvailable = repository.debugLoginAvailable(),
+        )
+    )
+
     val state: StateFlow<AppUiState> = _state.asStateFlow()
 
     fun login(email: String, password: String, onSuccess: () -> Unit) = runRequest {
@@ -39,7 +49,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         onSuccess()
     }
 
+    fun debugLogin(onSuccess: () -> Unit) = runRequest {
+        repository.debugLogin()
+        val (profile, reports) = repository.dashboard()
+        _state.value = AppUiState(signedIn = true, profile = profile, reports = reports)
+        onSuccess()
+    }
+
     fun register(name: String, email: String, phone: String, password: String, onSuccess: () -> Unit) = runRequest {
+
         repository.register(name, email, phone, password)
         val (profile, reports) = repository.dashboard()
         _state.value = AppUiState(signedIn = true, message = "Account created successfully.", profile = profile, reports = reports)
@@ -90,13 +108,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun endVideo() = runRequest {
         val reportId = _state.value.submittedReport?.public_id ?: return@runRequest
+        val wasRecording = _state.value.recording
         videoPublisher.stop()
-        repository.stopStream(reportId)
+        val stopped = repository.stopStream(reportId)
+        val recordingAvailable = wasRecording || stopped.recording_available
         _state.value = _state.value.copy(
-            message = "Video ended. Your emergency report remains open for officers.",
+            message = if (recordingAvailable) "Video ended. You can start transcription now." else "Video ended. Your emergency report remains open for officers.",
             streaming = false,
             recording = false,
+            recordingAvailable = recordingAvailable,
         )
+    }
+
+    fun transcribeVideo() = runRequest {
+        val reportId = _state.value.submittedReport?.public_id ?: return@runRequest
+        _state.value = _state.value.copy(transcribing = true, message = "Reading your saved signing video…")
+        try {
+            val result = repository.transcribeRecording(reportId)
+            _state.value = _state.value.copy(
+                transcript = result.transcript,
+                message = "Transcription is ready for responding officers.",
+            )
+        } finally {
+            _state.value = _state.value.copy(transcribing = false)
+        }
     }
 
     fun attachPreview(renderer: SurfaceViewRenderer) = videoPublisher.attachPreview(renderer)
@@ -106,7 +141,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun signOut(onSuccess: () -> Unit) {
         viewModelScope.launch { videoPublisher.stop() }
         repository.signOut()
-        _state.value = AppUiState()
+        _state.value = AppUiState(
+            debugLoginAvailable = repository.debugLoginAvailable(),
+        )
         onSuccess()
     }
 
@@ -115,7 +152,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startAnotherReport() {
-        _state.value = _state.value.copy(submittedReport = null, message = null, error = null)
+        _state.value = _state.value.copy(
+            submittedReport = null,
+            message = null,
+            error = null,
+            recordingAvailable = false,
+            transcribing = false,
+            transcript = null,
+        )
     }
 
     override fun onCleared() {

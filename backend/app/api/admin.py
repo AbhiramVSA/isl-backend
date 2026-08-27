@@ -23,7 +23,7 @@ from app.schemas import (
     PriorityUpdate,
     ReportOut,
 )
-from app.services.reports import get_report
+from app.services.reports import get_report, report_outputs_with_transcripts
 
 router = APIRouter(prefix="/admin", tags=["Administration"])
 
@@ -105,16 +105,17 @@ async def add_officer(
 @router.get("/reports", response_model=list[ReportOut])
 async def reports(
     _principal: Principal = Depends(require_admin), db: AsyncSession = Depends(get_db)
-) -> list[Report]:
+) -> list[ReportOut]:
     from app.services.reports import REPORT_LOAD
 
-    return list(
+    rows = list(
         (
             await db.scalars(
                 select(Report).options(*REPORT_LOAD).order_by(Report.created_at.desc()).limit(200)
             )
         ).all()
     )
+    return await report_outputs_with_transcripts(db, rows)
 
 
 @router.patch("/reports/{public_id}/priority", response_model=ReportOut)

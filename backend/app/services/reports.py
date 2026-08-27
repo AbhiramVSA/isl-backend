@@ -6,10 +6,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import AuditLog, Priority, Report, ReportHistory, ReportStatus
-from app.schemas import ReportCreate
+from app.schemas import ReportCreate, ReportOut
 from app.services.routing_service import routing_service
 
 REPORT_LOAD = (selectinload(Report.office), selectinload(Report.assigned_officer))
+
+
+async def report_outputs_with_transcripts(
+    db: AsyncSession, reports: list[Report]
+) -> list[ReportOut]:
+    if not reports:
+        return []
+    transcript_ids = set(
+        (
+            await db.scalars(
+                select(ReportHistory.report_id)
+                .where(
+                    ReportHistory.report_id.in_([report.id for report in reports]),
+                    ReportHistory.event == "SIGN_TRANSCRIBED",
+                )
+                .distinct()
+            )
+        ).all()
+    )
+    return [
+        ReportOut.model_validate(report).model_copy(
+            update={"transcript_available": report.id in transcript_ids}
+        )
+        for report in reports
+    ]
 
 
 def determine_priority(category: str, answers: dict) -> Priority:

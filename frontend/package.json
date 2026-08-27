@@ -19,6 +19,7 @@
     "vite": "^7.0.0"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1",
     "livekit-client": "^2.15.0",
     "maplibre-gl": "^5.6.0"
   }

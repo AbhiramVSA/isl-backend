@@ -20,6 +20,25 @@ class SessionStore(context: Context) {
             .apply()
     }
 
-    fun clear() = preferences.edit().clear().apply()
+    fun saveDebugCredentials(email: String, password: String) {
+        preferences.edit()
+            .putString("debug_login_email", email)
+            .putString("debug_login_password", password)
+            .apply()
+    }
+
+    fun debugCredentials(): LoginRequest? {
+        val email = preferences.getString("debug_login_email", null).orEmpty()
+        val password = preferences.getString("debug_login_password", null).orEmpty()
+        return if (email.isBlank() || password.isBlank()) null else LoginRequest(email, password)
+    }
+
+    fun clearTokens() {
+        preferences.edit()
+            .remove("access_token")
+            .remove("refresh_token")
+            .apply()
+    }
+
 }
 

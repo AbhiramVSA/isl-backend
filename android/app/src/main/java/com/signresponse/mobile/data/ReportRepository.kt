@@ -1,5 +1,6 @@
 package com.signresponse.mobile.data
 
+import com.signresponse.mobile.BuildConfig
 import com.google.gson.Gson
 import retrofit2.HttpException
 import java.io.IOException
@@ -19,7 +20,24 @@ class ReportRepository(
     }
 
     suspend fun login(email: String, password: String) {
-        session.save(api.login(LoginRequest(email.trim(), password)))
+        val request = LoginRequest(email.trim(), password)
+        session.save(api.login(request))
+        if (BuildConfig.DEBUG) session.saveDebugCredentials(request.email, request.password)
+    }
+
+    fun debugLoginAvailable(): Boolean = BuildConfig.DEBUG && debugCredentials() != null
+
+    suspend fun debugLogin() {
+        val credentials = debugCredentials()
+            ?: throw IllegalStateException("No debug credentials are saved.")
+        login(credentials.email, credentials.password)
+    }
+
+    private fun debugCredentials(): LoginRequest? {
+        session.debugCredentials()?.let { return it }
+        val email = BuildConfig.DEBUG_LOGIN_EMAIL
+        val password = BuildConfig.DEBUG_LOGIN_PASSWORD
+        return if (email.isBlank() || password.isBlank()) null else LoginRequest(email, password)
     }
 
     suspend fun sendEmergency(
@@ -55,14 +73,19 @@ class ReportRepository(
         return api.recordStream(reportId, "Bearer $token")
     }
 
-    suspend fun stopStream(reportId: String) {
-        val token = session.accessToken ?: return
-        api.stopStream(reportId, "Bearer $token")
+    suspend fun stopStream(reportId: String): StreamState {
+        val token = session.accessToken ?: throw IllegalStateException("Please sign in first.")
+        return api.stopStream(reportId, "Bearer $token")
+    }
+
+    suspend fun transcribeRecording(reportId: String): SignTranscription {
+        val token = session.accessToken ?: throw IllegalStateException("Please sign in first.")
+        return api.transcribeRecording(reportId, "Bearer $token")
     }
 
     fun signedIn() = session.accessToken != null
 
-    fun signOut() = session.clear()
+    fun signOut() = session.clearTokens()
 
     fun friendlyError(error: Throwable): String = when (error) {
         is HttpException -> {

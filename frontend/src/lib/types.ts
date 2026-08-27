@@ -8,6 +8,7 @@ export interface Report {
   initial_latitude: number; initial_longitude: number; location_accuracy: number | null;
   created_at: string; updated_at: string; acknowledged_at: string | null; responding_at: string | null;
   arrived_at: string | null; resolved_at: string | null; office: Office; assigned_officer: Officer | null;
+  transcript_available: boolean;
 }
 export interface ReportsPage { items: Report[]; page: number; page_size: number; total: number }
 export interface Location { latitude: number; longitude: number; accuracy: number | null; speed: number | null; heading: number | null; recorded_at: string }

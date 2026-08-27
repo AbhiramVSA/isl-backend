@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import io.livekit.android.renderer.SurfaceViewRenderer
 
 private enum class Screen { Welcome, Login, Register, Dashboard, Emergency }
@@ -83,6 +84,9 @@ fun SignResponseApp(viewModel: AppViewModel = viewModel()) {
                 Screen.Welcome -> WelcomeScreen(
                     onLogin = { screen = Screen.Login },
                     onRegister = { screen = Screen.Register },
+                    loading = state.loading,
+                    debugLoginAvailable = state.debugLoginAvailable,
+                    onDebugLogin = { viewModel.debugLogin { screen = Screen.Dashboard } },
                 )
                 Screen.Login -> LoginScreen(
                     loading = state.loading,
@@ -111,8 +115,12 @@ fun SignResponseApp(viewModel: AppViewModel = viewModel()) {
                     submitted = state.submittedReport != null,
                     streaming = state.streaming,
                     recording = state.recording,
+                    recordingAvailable = state.recordingAvailable,
+                    transcribing = state.transcribing,
+                    transcript = state.transcript,
                     onSend = viewModel::sendEmergency,
                     onEndVideo = viewModel::endVideo,
+                    onTranscribe = viewModel::transcribeVideo,
                     onAttachPreview = viewModel::attachPreview,
                     onDetachPreview = viewModel::detachPreview,
                     onStartAnother = viewModel::startAnotherReport,
@@ -173,7 +181,14 @@ private fun UserDashboard(
 }
 
 @Composable
-private fun WelcomeScreen(onLogin: () -> Unit, onRegister: () -> Unit) {
+private fun WelcomeScreen(
+    onLogin: () -> Unit,
+    onRegister: () -> Unit,
+    loading: Boolean,
+    debugLoginAvailable: Boolean,
+    onDebugLogin: () -> Unit,
+) {
+
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(28.dp),
         verticalArrangement = Arrangement.Center,
@@ -195,6 +210,13 @@ private fun WelcomeScreen(onLogin: () -> Unit, onRegister: () -> Unit) {
         Button(onClick = onLogin, modifier = Modifier.fillMaxWidth().height(54.dp)) { Text("Login") }
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = onRegister, modifier = Modifier.fillMaxWidth().height(54.dp)) { Text("Create Account") }
+        if (debugLoginAvailable) {
+            Spacer(Modifier.height(24.dp))
+            Text("Debug build", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Spacer(Modifier.height(6.dp))
+            TextButton(onClick = onDebugLogin, enabled = !loading) { Text("Auto-login with saved account") }
+        }
+
     }
 }
 
@@ -262,8 +284,12 @@ private fun EmergencyScreen(
     submitted: Boolean,
     streaming: Boolean,
     recording: Boolean,
+    recordingAvailable: Boolean,
+    transcribing: Boolean,
+    transcript: String?,
     onSend: (String, String, Double, Double, Float?) -> Unit,
     onEndVideo: () -> Unit,
+    onTranscribe: () -> Unit,
     onAttachPreview: (SurfaceViewRenderer) -> Unit,
     onDetachPreview: (SurfaceViewRenderer) -> Unit,
     onStartAnother: () -> Unit,
@@ -275,12 +301,24 @@ private fun EmergencyScreen(
     var title by remember { mutableStateOf("") }; var description by remember { mutableStateOf("") }
     var location by remember { mutableStateOf<Location?>(null) }
     var locationError by remember { mutableStateOf<String?>(null) }
+    fun loadCurrentLocation(onReady: (Location) -> Unit = {}) {
+        locationError = null
+        locationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+            .addOnSuccessListener { found ->
+                location = found
+                if (found == null) {
+                    locationError = "Location is not ready. Turn on location and try again."
+                } else {
+                    onReady(found)
+                }
+            }
+            .addOnFailureListener {
+                locationError = "Location could not be read. Turn on location and try again."
+            }
+    }
     val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         if (result.values.any { it }) {
-            locationClient.lastLocation.addOnSuccessListener { found ->
-                location = found
-                if (found == null) locationError = "Location is not ready. Turn on location and try again."
-            }
+            loadCurrentLocation()
         } else locationError = "Location permission is required to send help to the correct office."
     }
     fun requestLocation() = locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
@@ -291,10 +329,8 @@ private fun EmergencyScreen(
         if (!locationGranted || !cameraGranted || !microphoneGranted) {
             locationError = "Location, camera, and microphone permissions are required for the emergency video."
         } else {
-            locationClient.lastLocation.addOnSuccessListener { found ->
-                location = found
-                if (found == null) locationError = "Location is not ready. Turn on location and tap the emergency button again."
-                else onSend(title, description, found.latitude, found.longitude, found.accuracy)
+            loadCurrentLocation { found ->
+                onSend(title, description, found.latitude, found.longitude, found.accuracy)
             }
         }
     }
@@ -343,7 +379,30 @@ private fun EmergencyScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.fillMaxWidth().height(64.dp),
                 ) { Text(if (loading) "Ending…" else "END VIDEO", fontWeight = FontWeight.ExtraBold) }
-                else OutlinedButton(onClick = onStartAnother, modifier = Modifier.fillMaxWidth()) { Text("Send Another Report") }
+                else {
+                    if (recordingAvailable && transcript == null) {
+                        Button(
+                            onClick = onTranscribe,
+                            enabled = !loading,
+                            modifier = Modifier.fillMaxWidth().height(58.dp),
+                        ) {
+                            if (transcribing) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                            else Text("START TRANSCRIPTION", fontWeight = FontWeight.ExtraBold)
+                        }
+                        Spacer(Modifier.height(14.dp))
+                    }
+                    transcript?.let {
+                        Column(
+                            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).padding(16.dp),
+                        ) {
+                            Text("Rough transcript", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(6.dp))
+                            Text(it, style = MaterialTheme.typography.titleMedium)
+                        }
+                        Spacer(Modifier.height(14.dp))
+                    }
+                    OutlinedButton(onClick = onStartAnother, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text("Send Another Report") }
+                }
             } else {
                 Text("Need urgent help?", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text("Tap once to notify the correct office and start your sign-language video. Title and details are optional.", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)

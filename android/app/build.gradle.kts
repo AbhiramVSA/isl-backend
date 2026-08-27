@@ -1,4 +1,17 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+val localProperties = Properties().apply {
+    val propertiesFile = rootProject.file("local.properties")
+    if (propertiesFile.isFile) propertiesFile.inputStream().use(::load)
+}
+
+fun localBuildConfigString(name: String): String {
+    val value = localProperties.getProperty(name, "")
+        .replace("\\", "\\\\").replace("\"", "\\\"")
+    return "\"$value\""
+}
+
 
 plugins {
     id("com.android.application")
@@ -19,10 +32,18 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/v1/\"")
+        buildConfigField("String", "DEBUG_LOGIN_EMAIL", "\"\"")
+        buildConfigField("String", "DEBUG_LOGIN_PASSWORD", "\"\"")
+
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "DEBUG_LOGIN_EMAIL", localBuildConfigString("DEBUG_LOGIN_EMAIL"))
+            buildConfigField("String", "DEBUG_LOGIN_PASSWORD", localBuildConfigString("DEBUG_LOGIN_PASSWORD"))
+        }
         release {
+
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

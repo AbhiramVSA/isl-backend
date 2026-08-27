@@ -3,7 +3,8 @@
   import { statusLabel } from '$lib/types';
   import { relativeTime } from '$lib/time';
   let { report, onPick, busy = false }: { report: Report; onPick?: (report: Report) => void; busy?: boolean } = $props();
-  const isAvailable = $derived(report.status === 'NEW' && !report.assigned_officer);
+  const isAvailable = $derived(report.status === "NEW" && !report.assigned_officer);
+  const reportHref = $derived("/reports/" + report.public_id);
   const assignmentLabel = $derived.by(() => {
     if (isAvailable) return 'Available — choose this report';
     if (report.status === 'RESOLVED') return 'Resolved';
@@ -20,7 +21,7 @@
   <div class="assignment" class:available={isAvailable} class:resolved={report.status === 'RESOLVED'}><span class="dot"></span>{assignmentLabel}</div>
   <h3>{report.category}</h3>
   <p>{report.description}</p>
-  <div class="card-foot"><span>{report.office.name}</span><div class="card-actions">{#if isAvailable && onPick}<button class="button" disabled={busy} onclick={() => onPick?.(report)}>{busy ? 'Taking report…' : 'Take Report'}</button>{/if}<a class="button secondary" href={`/reports/${report.public_id}`}>View Report</a></div></div>
+  <div class="card-foot"><span>{report.office.name}</span><div class="card-actions">{#if isAvailable && onPick}<button class="button" disabled={busy} onclick={() => onPick?.(report)}>{busy ? 'Taking report…' : 'Take Report'}</button>{/if}{#if report.transcript_available}<a class="button secondary" href={reportHref + "#transcript"}>View Transcript</a>{/if}<a class="button secondary" href={reportHref}>View Report</a></div></div>
 </article>
 
 <style>

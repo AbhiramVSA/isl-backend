@@ -1,0 +1,14 @@
+{
+  "test_loss": 0.20742338960541304,
+  "test_top1_accuracy": 0.9517884914463453,
+  "test_top5_accuracy": 0.9922239502332815,
+  "macro_precision": 0.9564885496183206,
+  "macro_recall": 0.9561068702290076,
+  "macro_f1": 0.9510996001454016,
+  "weighted_f1": 0.9474820410279198,
+  "best_epoch": 59,
+  "best_validation_top1": 0.9657853810264385,
+  "best_validation_top5": 0.9860031104199067,
+  "num_test_samples": 643,
+  "num_classes": 262
+}

@@ -4,6 +4,7 @@
   import { auth } from '$lib/auth.svelte';
   import { connection } from '$lib/realtime.svelte';
   import ReportCard from '$lib/components/ReportCard.svelte';
+  import SignTranscriber from '$lib/components/SignTranscriber.svelte';
   import { parseApiTime } from '$lib/time';
   import type { Report, ReportsPage } from '$lib/types';
   let reports = $state<Report[]>([]); let loading = $state(true); let error = $state(''); let notice=$state(''); let taking=$state(''); let showAll=$state(false); let scope=$state<'office'|'all'>('office'); let loadingRequest:Promise<void>|null=null;
@@ -19,6 +20,7 @@
   $effect(()=>{ if(connection.lastEvent?.type && connection.lastEvent.type!=='connected') load(); });
 </script>
 <div class="page-head"><div><p class="eyebrow">Operational overview</p><h1>Good day{auth.name ? `, ${auth.name.split(' ')[0]}` : ''}</h1><p>{scope==='all'?'Every report stored in the database.':`Reports routed to ${auth.office || 'your assigned office'}.`}</p></div><a class="button" href="/reports">Open report queue</a></div>
+<SignTranscriber />
 <div class="scope-row"><span>Report source</span><div class="report-toggle" role="group" aria-label="Report source"><button class:active={scope==='office'} onclick={()=>setScope('office')}>My Offices</button><button class:active={scope==='all'} onclick={()=>setScope('all')}>All Database Reports</button></div></div>
 <section class="metrics" aria-label="Report summary">
   <div><span>New Reports</span><strong>{newCount}</strong></div><div class="urgent"><span>High Priority</span><strong>{highCount}</strong></div><div><span>Officers Responding</span><strong>{responding}</strong></div><div><span>Resolved Today</span><strong>{resolvedToday}</strong></div>

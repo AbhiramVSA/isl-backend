@@ -33,7 +33,12 @@ from app.schemas import (
     ReportVideoOut,
 )
 from app.services.realtime import realtime_hub
-from app.services.reports import REPORT_LOAD, get_report, transition_report
+from app.services.reports import (
+    REPORT_LOAD,
+    get_report,
+    report_outputs_with_transcripts,
+    transition_report,
+)
 from app.services.routing_service import haversine_km
 
 router = APIRouter(prefix="/officer", tags=["Officer reports"])
@@ -96,8 +101,9 @@ async def list_reports(
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
+    reports = list(rows.all())
     return PaginatedReports(
-        items=[ReportOut.model_validate(row) for row in rows.all()],
+        items=await report_outputs_with_transcripts(db, reports),
         page=page,
         page_size=page_size,
         total=total,

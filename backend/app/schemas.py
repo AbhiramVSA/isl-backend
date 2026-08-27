@@ -99,6 +99,7 @@ class ReportOut(ORMModel):
     resolved_at: datetime | None
     office: OfficeOut
     assigned_officer: OfficerSummary | None
+    transcript_available: bool = False
 
 
 class PaginatedReports(BaseModel):

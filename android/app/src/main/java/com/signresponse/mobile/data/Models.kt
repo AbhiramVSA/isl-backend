@@ -54,8 +54,20 @@ data class StreamState(
     val active: Boolean,
     val requested: Boolean,
     val recording: Boolean = false,
+    val recording_available: Boolean = false,
     val viewer_url: String?,
     val access_token: String?,
+)
+
+data class TranscribedWord(
+    val word: String,
+    val confidence: Double,
+)
+
+data class SignTranscription(
+    val transcript: String,
+    val words: List<TranscribedWord>,
+    val model: String,
 )
 
 data class ErrorBody(val detail: String?)
