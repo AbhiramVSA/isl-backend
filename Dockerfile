@@ -1,6 +1,9 @@
-# CPU-only image on purpose: the LSTM is ~2.7 MB and MediaPipe Holistic (the
-# actual per-request bottleneck) runs on CPU in Python, so a GPU base image
-# would add gigabytes and host-side nvidia-container-toolkit setup for no gain.
+# GPU-enabled via tensorflow[and-cuda] (CUDA/cuDNN come in as pip packages),
+# so no CUDA base image is needed — just the NVIDIA driver and
+# nvidia-container-toolkit on the host, and a GPU reservation at runtime
+# (docker-compose.yml provides it). Falls back to CPU if no GPU is visible.
+# Note MediaPipe landmark extraction is CPU-only in Python either way; the
+# GPU accelerates the LSTM.
 FROM python:3.11-slim-bookworm
 
 # ffmpeg: sk-video shells out to it to decode uploaded videos
@@ -15,8 +18,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Cache mount keeps the multi-GB CUDA wheels out of the image layer while
+# letting interrupted builds resume without redownloading.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
+
+# Allocate GPU memory as needed instead of TF's default of grabbing nearly
+# all VRAM — this model needs a sliver of an A100, and the server is shared.
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
 
 # Bake the trained LSTM weights (~2.7 MB) into the image. If this URL ever
 # dies, download the file to ml_models/ on the host, drop ml_models from

@@ -66,13 +66,35 @@ spaced frames, so any clip of roughly 2–5 seconds works.
 
 ## Deploy with Docker
 
-The image is CPU-only on purpose: the LSTM is ~2.7 MB and MediaPipe (the real
-per-request cost) runs on CPU in Python, so a CUDA base image would add
-gigabytes and host setup for no speedup — it runs fine on a GPU server, it
-just doesn't touch the GPU. The trained weights are downloaded into the image
-at build time, so no manual model download is needed.
+The image runs TensorFlow on the GPU via `tensorflow[and-cuda]` (CUDA 12.2 +
+cuDNN 8.9 ship as pip packages inside the image), so the host only needs the
+NVIDIA driver (≥ 535) and nvidia-container-toolkit — no CUDA install on the
+host. MediaPipe landmark extraction is CPU-only in Python regardless; the GPU
+accelerates the LSTM. `TF_FORCE_GPU_ALLOW_GROWTH=true` is set so the
+container allocates VRAM as needed instead of TF's default of grabbing nearly
+all of it (matters on a shared server). The trained weights are downloaded
+into the image at build time, so no manual model download is needed.
 
-On the server (needs Docker with the compose plugin):
+Preflight — check Docker can see the GPU:
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.2.2-base-ubuntu22.04 nvidia-smi
+```
+
+If that errors with "could not select device driver nvidia", install the
+toolkit (root, Ubuntu/Debian):
+
+```bash
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -sL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+Then deploy (needs Docker with the compose plugin):
 
 ```bash
 git clone <repo-url> isl-backend
@@ -81,8 +103,11 @@ docker compose up -d --build
 
 # wait for startup (TensorFlow import takes a while), then verify:
 curl http://localhost:8100/health
-# {"status":"ok","model_loaded":true,"model_error":null}
+# {"status":"ok","model_loaded":true,"model_error":null,"gpus":["/physical_device:GPU:0"]}
 ```
+
+An empty `gpus` list means the API is up but fell back to CPU — fix the
+toolkit/driver and `docker compose up -d --force-recreate`.
 
 The API is published on **host port 8100** (container-internal 8000). To use a
 different host port: `ISL_PORT=9000 docker compose up -d`, or put

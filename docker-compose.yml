@@ -13,3 +13,12 @@ services:
       # Lock down to the frontend origin once the domain exists,
       # e.g. CORS_ORIGINS=https://isl.example.org
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    # One GPU is plenty for this model; needs nvidia-container-toolkit on the
+    # host. GET /health lists the GPUs the app actually sees.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

@@ -9,7 +9,11 @@ python-multipart
 # ISL model serving
 # Upstream trained on tensorflow 2.13, but its typing-extensions pin conflicts
 # with pydantic v2; 2.15 is the closest Keras-2 release that coexists with it.
-tensorflow==2.15.1
+# [and-cuda] bundles the CUDA 12.2/cuDNN 8.9 runtime as pip packages (Linux
+# wheels only, hence the markers) so the Docker image runs on GPU without a
+# CUDA base image. 2.15.1 specifically fixed and-cuda library discovery.
+tensorflow[and-cuda]==2.15.1; sys_platform == "linux"
+tensorflow==2.15.1; sys_platform != "linux"
 # Upstream used 0.10.2, which ships no Linux wheels for py3.11; 0.10.5 is the
 # closest release that does, with the same legacy Holistic solution API.
 mediapipe==0.10.5
