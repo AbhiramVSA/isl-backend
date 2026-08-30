@@ -64,6 +64,49 @@ curl -F "file=@hello.mp4" http://localhost:8000/api/v1/predict
 Videos shorter than 45 frames are zero-padded; longer ones are downsampled to 45 evenly
 spaced frames, so any clip of roughly 2–5 seconds works.
 
+## Deploy with Docker
+
+The image is CPU-only on purpose: the LSTM is ~2.7 MB and MediaPipe (the real
+per-request cost) runs on CPU in Python, so a CUDA base image would add
+gigabytes and host setup for no speedup — it runs fine on a GPU server, it
+just doesn't touch the GPU. The trained weights are downloaded into the image
+at build time, so no manual model download is needed.
+
+On the server (needs Docker with the compose plugin):
+
+```bash
+git clone <repo-url> isl-backend
+cd isl-backend
+docker compose up -d --build
+
+# wait for startup (TensorFlow import takes a while), then verify:
+curl http://localhost:8100/health
+# {"status":"ok","model_loaded":true,"model_error":null}
+```
+
+The API is published on **host port 8100** (container-internal 8000). To use a
+different host port: `ISL_PORT=9000 docker compose up -d`, or put
+`ISL_PORT=9000` in a `.env` file next to `docker-compose.yml`.
+
+Useful afterwards:
+
+```bash
+docker compose logs -f          # tail logs
+docker compose up -d --build    # redeploy after git pull
+docker compose down             # stop
+```
+
+### For the sysadmin (domain mapping)
+
+- Reverse-proxy the domain to `http://127.0.0.1:8100` (plain HTTP, no websockets).
+- Allow large request bodies — clients upload short videos. nginx: `client_max_body_size 50m;`
+- Inference takes a few seconds per request; set read timeouts accordingly. nginx: `proxy_read_timeout 120s;`
+- Health endpoint for monitoring: `GET /health`.
+
+Once the domain exists, restrict CORS to the frontend origin (default is `*`):
+`CORS_ORIGINS=https://your-frontend.example.org` in the `.env` next to
+`docker-compose.yml`, then `docker compose up -d` to apply.
+
 ## Notes
 
 - The checkpoint (`170-0.83.hdf5`) is weights-only; the layer stack is rebuilt in

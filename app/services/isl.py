@@ -13,7 +13,13 @@ import tempfile
 import cv2
 import mediapipe as mp
 import numpy as np
-import skvideo.io
+
+# sk-video 1.1.10 (unmaintained) still reads the np.float/np.int aliases that
+# NumPy 1.24 removed; restore them before skvideo touches numpy.
+if not hasattr(np, "float"):
+    np.float = np.float64
+    np.int = np.int_
+import skvideo.io  # noqa: E402
 
 ACTIONS = ["Hello", "How are you", "thank you"]
 SEQUENCE_LENGTH = 45

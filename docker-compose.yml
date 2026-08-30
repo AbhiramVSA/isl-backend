@@ -1,0 +1,15 @@
+services:
+  isl-backend:
+    build: .
+    image: isl-backend
+    container_name: isl-backend
+    restart: unless-stopped
+    ports:
+      # Host port 8100 -> container port 8000. This is the port to give the
+      # sysadmin for the domain mapping. Override with ISL_PORT (shell env or
+      # a .env file next to this compose file), e.g. ISL_PORT=9000.
+      - "${ISL_PORT:-8100}:8000"
+    environment:
+      # Lock down to the frontend origin once the domain exists,
+      # e.g. CORS_ORIGINS=https://isl.example.org
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}

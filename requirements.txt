@@ -10,7 +10,9 @@ python-multipart
 # Upstream trained on tensorflow 2.13, but its typing-extensions pin conflicts
 # with pydantic v2; 2.15 is the closest Keras-2 release that coexists with it.
 tensorflow==2.15.1
-mediapipe==0.10.2
+# Upstream used 0.10.2, which ships no Linux wheels for py3.11; 0.10.5 is the
+# closest release that does, with the same legacy Holistic solution API.
+mediapipe==0.10.5
 sk-video==1.1.10
 scipy
 numpy<2
