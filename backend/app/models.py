@@ -140,6 +140,28 @@ class Report(Base):
     arrived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+    # --- filed from the Equal app -------------------------------------------
+    # Null on anything filed through the existing mobile endpoint. The app
+    # writes a whole document on the device before it ever reaches the network,
+    # and `description` alone would throw away the part that matters: the signed
+    # transcript and the analysis written from it.
+    reference_code: Mapped[str | None] = mapped_column(String(20), unique=True, index=True)
+    # Generated on the device and stable across retries, so a report submitted
+    # twice over a flaky connection is stored once.
+    client_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    title: Mapped[str | None] = mapped_column(String(300))
+    severity: Mapped[str | None] = mapped_column(String(20))
+    situation_analysis: Mapped[str | None] = mapped_column(Text)
+    recommended_actions: Mapped[list | None] = mapped_column(JSON)
+    transcript: Mapped[str | None] = mapped_column(Text)
+    labels: Mapped[list | None] = mapped_column(JSON)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    location_label: Mapped[str | None] = mapped_column(String(300))
+    reporter_name: Mapped[str | None] = mapped_column(String(120))
+    source: Mapped[str | None] = mapped_column(String(20))
+    generated_by: Mapped[str | None] = mapped_column(String(60))
+
     office: Mapped[Office] = relationship()
     assigned_officer: Mapped[Officer | None] = relationship()
 
