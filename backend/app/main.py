@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.api import (
     admin,
     auth,
+    mobile,
     officer_reports,
     offices,
     reports,
@@ -98,6 +99,13 @@ for api_router in (
     websocket.router,
 ):
     app.include_router(api_router, prefix="/api/v1")
+
+# The Equal mobile app, mounted away from the routes above. It asks for
+# POST /reports, GET /reports/{id} and GET /auth/me too, in incompatible shapes
+# — different id types, a five-value status against seven — so sharing paths
+# would mean breaking one client to serve the other. The app's base address is
+# runtime configuration, so pointing it at https://host/app costs nothing.
+app.include_router(mobile.router, prefix="/app")
 
 
 @app.get("/health", tags=["Operations"])

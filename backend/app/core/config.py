@@ -22,6 +22,18 @@ class Settings(BaseSettings):
     livekit_api_secret: str = "secret"
     recording_dir: Path = Path("recordings")
     development_global_officer_queue: bool = True
+
+    # --- Equal mobile app ---------------------------------------------------
+    # The console rotates a 15-minute token against /auth/refresh. The app holds
+    # a single token and has no refresh flow, so it gets a long-lived one rather
+    # than signing someone out in the middle of an emergency.
+    mobile_access_token_days: int = 30
+    # Set to hold the NIM key server-side; without it /api/v1/llm/chat answers
+    # 503 and the app goes on calling NIM directly with its bundled key.
+    nvidia_nim_api_key: str = ""
+    nim_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nim_default_model: str = "meta/muse-glimmer-30b"
+    nim_timeout_seconds: float = 120.0
     auth_requests_per_minute: int = 30
     read_requests_per_minute: int = 1200
     write_requests_per_minute: int = 240
