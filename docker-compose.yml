@@ -10,6 +10,22 @@ services:
     ports: ["7880:7880", "7881:7881", "7882:7882/udp"]
     volumes: ["./livekit.yaml:/etc/livekit.yaml:ro"]
     depends_on: [redis]
+  api:
+    image: ghcr.io/itskryxen/sign-lang-backend:latest
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////data/incident.db
+      UPLOAD_DIR: /data/uploads
+      RECORDING_DIR: /data/recordings
+      LIVEKIT_URL: ws://livekit:7880
+    ports: ["8000:8000"]
+    volumes:
+      - api-data:/data
+      - ./backend/recordings:/data/recordings
+    depends_on: [redis, livekit]
   egress:
     image: livekit/egress:latest
     cap_add: [SYS_ADMIN]
@@ -21,3 +37,4 @@ services:
     depends_on: [redis, livekit]
 volumes:
   redis-data:
+  api-data:
