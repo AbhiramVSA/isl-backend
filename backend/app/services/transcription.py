@@ -7,6 +7,8 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
+from app.core.config import settings
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EXP1_DIR = REPO_ROOT / "exp1"
 INFERENCE_SCRIPT = EXP1_DIR / "infer_video.py"
@@ -14,12 +16,21 @@ CHECKPOINT = EXP1_DIR / "best_classifier.pt"
 HOLISTIC_MODEL = EXP1_DIR / ".models" / "holistic_landmarker.task"
 EXP1_PYTHON = EXP1_DIR / ".venv" / "bin" / "python"
 
+from .isl_recognition import transcribe_video as transcribe_with_safety_model
+
 
 def model_ready() -> bool:
+    if settings.transcription_backend.lower() == "safety":
+        # The recognition weights live in the separate isl service. The API
+        # container cannot inspect them directly; the service call is the
+        # authoritative runtime check when a clip is submitted.
+        return True
     return all(path.is_file() for path in (INFERENCE_SCRIPT, CHECKPOINT, HOLISTIC_MODEL, EXP1_PYTHON))
 
 
 async def transcribe_video(video_path: Path) -> dict:
+    if settings.transcription_backend.lower() == "safety":
+        return await transcribe_with_safety_model(video_path)
     if not model_ready():
         raise HTTPException(status_code=503, detail="The sign transcription model is not installed.")
 

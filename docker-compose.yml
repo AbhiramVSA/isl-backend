@@ -21,11 +21,26 @@ services:
       UPLOAD_DIR: /data/uploads
       RECORDING_DIR: /data/recordings
       LIVEKIT_URL: ws://livekit:7880
+      TRANSCRIPTION_BACKEND: ${TRANSCRIPTION_BACKEND:-safety}
+      ISL_RECOGNITION_URL: ${ISL_RECOGNITION_URL:-http://isl:8000}
     ports: ["8000:8000"]
     volumes:
       - api-data:/data
       - ./backend/recordings:/data/recordings
-    depends_on: [redis, livekit]
+    depends_on: [redis, livekit, isl]
+  isl:
+    build:
+      context: ./isl-recognition-safety
+      args:
+        TORCH_INDEX: ${TORCH_INDEX:-https://download.pytorch.org/whl/cu126}
+    image: isl-recognition-safety:latest
+    environment:
+      ISL_DEVICE: ${ISL_DEVICE:-auto}
+      ISL_MODELS_DIR: /app/models
+    volumes:
+      - ./isl-recognition-safety/models:/app/models
+    expose: ["8000"]
+    shm_size: "2g"
   egress:
     image: livekit/egress:latest
     cap_add: [SYS_ADMIN]

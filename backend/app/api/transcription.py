@@ -29,7 +29,9 @@ class TranscribedWord(BaseModel):
     start_seconds: float
     end_seconds: float
     alternatives: list[Alternative]
-    landmarks: dict[str, float | int]
+    # Recognition backends may attach textual metadata (for example a
+    # confidence status) alongside numeric landmark measurements.
+    landmarks: dict[str, float | int | str]
 
 
 class SignTranscription(BaseModel):

@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     recording_dir: Path = Path("recordings")
     development_global_officer_queue: bool = True
 
+    # Recognition backend. ``safety`` points at the isl-recognition-safety
+    # service; ``legacy`` keeps the exp1 subprocess available as a fallback.
+    transcription_backend: str = "safety"
+    isl_recognition_url: str = "http://isl:8000"
+    isl_recognition_timeout_seconds: float = 180.0
+    isl_recognition_poll_seconds: float = 0.5
+
     # --- Equal mobile app ---------------------------------------------------
     # The console rotates a 15-minute token against /auth/refresh. The app holds
     # a single token and has no refresh flow, so it gets a long-lived one rather

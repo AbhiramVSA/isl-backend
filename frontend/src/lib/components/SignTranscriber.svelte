@@ -101,9 +101,9 @@
 <section class="transcriber" aria-labelledby="sign-transcriber-title">
   <div class="transcriber-head">
     <div>
-      <p class="eyebrow">exp1 model</p>
+      <p class="eyebrow">ISL recognition + safety model</p>
       <h2 id="sign-transcriber-title">Try sign transcription</h2>
-      <p>Record one clear sign at a time. The model checks each 2.5-second part of the clip.</p>
+      <p>Record a clear signing clip. The recognition pipeline analyses the full clip and returns recognised signs.</p>
     </div>
     {#if stream}<button class="plain" onclick={closeCamera} disabled={processing}>Close camera</button>{/if}
   </div>
