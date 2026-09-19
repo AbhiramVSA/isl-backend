@@ -5,6 +5,7 @@ description = "Operational incident reporting API"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.116",
+  "anyio>=4",
   "uvicorn[standard]>=0.35",
   "sqlalchemy[asyncio]>=2.0.41",
   "aiosqlite>=0.21",
@@ -15,6 +16,10 @@ dependencies = [
   "python-multipart>=0.0.20",
   "email-validator>=2.2",
   "livekit-api>=1.0",
+  # Outbound WebSocket client for the /app live-stream bridge to the
+  # isl-recognition-safety service (also pulled in by uvicorn[standard];
+  # pinned here so the bridge import never depends on that transitive edge).
+  "websockets>=15",
   # The NIM proxy calls out over HTTP. It was a dev-only dependency, which was
   # fine while nothing in app/ imported it.
   "httpx>=0.28",

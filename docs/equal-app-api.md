@@ -28,6 +28,9 @@ console's own API is left exactly as it was.
 | --- | --- | --- | --- |
 | `GET` | `/app/health` | — | Whether the transcription model can run |
 | `POST` | `/app/api/v1/predict` | — | One signing clip → one recognised word |
+| `WS` | `/app/api/v1/stream/landmarks` | — | Live landmarks → live glosses (preferred) |
+| `WS` | `/app/api/v1/stream/video` | — | Live JPEG frames → live glosses (fallback) |
+| `GET` | `/app/api/v1/stream/{id}/draft?token=` | — | Transcript saved when a stream closed |
 | `POST` | `/app/api/v1/auth/login` | — | Sign in, creating the account on first use |
 | `GET` | `/app/api/v1/auth/me` | ✅ | Check a stored token is still valid |
 | `POST` | `/app/api/v1/reports` | ✅ | **Store a report the app wrote** |
@@ -80,6 +83,15 @@ Unauthenticated, because the app records before anyone signs in and a person in
 trouble should not meet a login screen first. The service-wide rate limit is
 what stands between that and an open door to a subprocess; tighten
 `write_requests_per_minute` before this is public.
+
+## Live streaming
+
+For decode-while-streaming, open `WS /app/api/v1/stream/landmarks`
+(on-device MediaPipe) or `WS /app/api/v1/stream/video` (JPEG frames) instead
+of uploading clips — same unauthenticated model, per-IP/per-kind caps plus
+per-stream budgets as the abuse control, transcript saved as a draft for the
+report POST. Full wire protocol, budgets, and Android snippets:
+[mobile-streaming.md](mobile-streaming.md).
 
 ## Sign-in
 

@@ -10,6 +10,7 @@ from app.api import (
     admin,
     auth,
     mobile,
+    mobile_stream,
     officer_reports,
     offices,
     reports,
@@ -67,7 +68,9 @@ async def security_and_rate_limit(request: Request, call_next):
     if len(window) >= limit:
         return JSONResponse(
             status_code=429,
-            content={"detail": "The dashboard is updating too quickly. Please try again in a moment."},
+            content={
+                "detail": "The dashboard is updating too quickly. Please try again in a moment."
+            },
             headers={"Retry-After": "2"},
         )
     window.append(now)
@@ -106,6 +109,7 @@ for api_router in (
 # would mean breaking one client to serve the other. The app's base address is
 # runtime configuration, so pointing it at https://host/app costs nothing.
 app.include_router(mobile.router, prefix="/app")
+app.include_router(mobile_stream.router, prefix="/app")
 
 
 @app.get("/health", tags=["Operations"])

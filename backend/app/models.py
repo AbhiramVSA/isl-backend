@@ -229,6 +229,31 @@ class StreamSession(Base):
     recording_key: Mapped[str | None] = mapped_column(String(500))
 
 
+class StreamDraft(Base):
+    """Transcript accumulated while an unauthenticated /app stream was live.
+
+    The streaming endpoints take no login (like ``POST /app/api/v1/predict``:
+    record before sign-in), so there is no user to key on. The phone holds an
+    opaque ``draft_token`` returned in the WS ``hello``; only its SHA-256 is
+    stored. ``GET /app/api/v1/stream/{stream_id}/draft?token=`` returns the
+    transcript the phone prefills ``POST /app/api/v1/reports`` with.
+    """
+
+    __tablename__ = "stream_drafts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    stream_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    secret_hash: Mapped[str] = mapped_column(String(128))
+    kind: Mapped[str] = mapped_column(String(16), default="landmarks")
+    transcript: Mapped[str] = mapped_column(Text, default="")
+    sentences: Mapped[list] = mapped_column(JSON, default=list)
+    safety_events: Mapped[list] = mapped_column(JSON, default=list)
+    frames_seen: Mapped[int] = mapped_column(Integer, default=0)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -30,6 +30,30 @@ class Settings(BaseSettings):
     isl_recognition_timeout_seconds: float = 180.0
     isl_recognition_poll_seconds: float = 0.5
 
+    # --- Equal mobile app live streaming --------------------------------------
+    # The /app clip endpoint (POST /app/api/v1/predict) uploads a finished
+    # file and waits for a batch job. The streaming endpoints below instead
+    # bridge a phone-side WebSocket to the recognition service's own live
+    # socket, so glosses arrive while the user is still signing.
+    # Explicit URL (rather than deriving from isl_recognition_url) so tests
+    # and single-process deployments can point the bridge at a fake server.
+    isl_ws_url: str = "ws://isl:8000/ws/stream"
+    isl_stream_connect_timeout_seconds: float = 8.0
+    # Unauthenticated by design (like /predict: record before login), so the
+    # caps below — not identity — are the abuse control. Separate budgets:
+    # landmarks JSON is cheap, server-side JPEG decode is CPU-hot.
+    stream_max_landmark_streams: int = 50
+    stream_max_video_streams: int = 10
+    stream_max_streams_per_ip: int = 2
+    stream_max_in_fps_landmarks: float = 15.0
+    stream_max_in_fps_video: float = 10.0
+    stream_max_message_bytes_landmarks: int = 256 * 1024
+    stream_max_message_bytes_video: int = 512 * 1024
+    stream_max_minutes: float = 10.0
+    stream_max_bytes_mb: float = 200.0
+    stream_idle_seconds: float = 30.0
+    stream_draft_ttl_hours: float = 24.0
+
     # --- Equal mobile app ---------------------------------------------------
     # The console rotates a 15-minute token against /auth/refresh. The app holds
     # a single token and has no refresh flow, so it gets a long-lived one rather

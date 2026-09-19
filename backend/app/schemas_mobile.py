@@ -166,3 +166,26 @@ class StationResponse(BaseModel):
 
 class StationListResponse(BaseModel):
     stations: list[StationResponse]
+
+
+class StreamHello(BaseModel):
+    """First frame the phone receives after opening a streaming socket."""
+
+    type: str = "hello"
+    stream_id: str
+    draft_token: str
+    kind: str
+
+
+class StreamDraftResponse(BaseModel):
+    """Transcript saved when the stream closed, for prefilling a report."""
+
+    stream_id: str
+    kind: str
+    transcript: str
+    sentences: list[dict] = Field(default_factory=list)
+    safety_events: list[dict] = Field(default_factory=list)
+    frames_seen: int = 0
+    duration_ms: int = 0
+    completed: bool = False
+    expires_at: datetime
