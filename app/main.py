@@ -5,11 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import health
 from app.api.v1.router import api_router
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.db.base import Base
 from app.db.session import engine
 
-DEV_SECRET_KEY = "dev-only-insecure-key-change-me-before-deploying"
+DEV_SECRET_KEY = Settings.model_fields["secret_key"].default
 
 
 @asynccontextmanager
@@ -21,12 +21,14 @@ async def lifespan(app: FastAPI):
 
     Base.metadata.create_all(bind=engine)
 
-    if settings.secret_key == DEV_SECRET_KEY:
+    if settings.secret_key == DEV_SECRET_KEY or len(settings.secret_key) < 32:
         # Anyone who has read the source can mint a token for any account while
-        # this is in use, so say it loudly rather than only in the README.
+        # the default is in use (an empty or short key is little better), so
+        # say it loudly rather than only in the README.
         print(
-            "[isl-sos] WARNING: SECRET_KEY is the built-in development default. "
-            "Set SECRET_KEY in .env before exposing this service.",
+            "[isl-sos] WARNING: SECRET_KEY is the built-in development default "
+            "or shorter than 32 characters. Set a random SECRET_KEY in .env "
+            "before exposing this service.",
             flush=True,
         )
 

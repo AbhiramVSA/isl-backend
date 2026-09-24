@@ -12,8 +12,13 @@ def new_id(prefix: str) -> str:
 
 
 def new_reference_code(report_id: str) -> str:
-    """`SOS-4F2A91` — short enough to sign, or to read out over a relay call."""
-    tail = "".join(ch for ch in report_id if ch.isalnum())[-6:]
+    """`SOS-4F2A91C3` — short enough to sign, or to read out over a relay call.
+
+    Eight hex characters (32 bits). Six gave 50/50 odds of a collision on the
+    unique column by ~5,000 reports; eight pushes that past ~75,000, and the
+    submit route retries on the rare clash.
+    """
+    tail = "".join(ch for ch in report_id if ch.isalnum())[-8:]
     return f"SOS-{tail.upper()}"
 
 

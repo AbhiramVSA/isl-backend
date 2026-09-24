@@ -2,6 +2,7 @@ from datetime import timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -36,11 +37,14 @@ def submit_report(
     instead of filing a duplicate. A caller retrying over a bad connection must
     not end up with two incidents.
     """
-    existing = db.scalar(
-        select(Report).where(
-            Report.user_id == user.id, Report.client_id == payload.client_id
+    def find_existing() -> Report | None:
+        return db.scalar(
+            select(Report).where(
+                Report.user_id == user.id, Report.client_id == payload.client_id
+            )
         )
-    )
+
+    existing = find_existing()
     if existing is not None:
         response.status_code = status.HTTP_200_OK
         return ReportResponse.model_validate(existing)
@@ -74,7 +78,21 @@ def submit_report(
         generated_by=payload.generated_by,
     )
     db.add(report)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Either a concurrent retry beat us to (user_id, client_id) — return the
+        # record it filed — or the reference code collided, which the caller
+        # should not see: assign a fresh one and try once more.
+        db.rollback()
+        existing = find_existing()
+        if existing is not None:
+            response.status_code = status.HTTP_200_OK
+            return ReportResponse.model_validate(existing)
+        report.id = new_id("rpt")
+        report.reference_code = new_reference_code(report.id)
+        db.add(report)
+        db.commit()
     db.refresh(report)
 
     # TODO: this is where the incident should be pushed to whoever dispatches.

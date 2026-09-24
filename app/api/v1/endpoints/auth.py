@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -45,9 +46,23 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse
             passcode_hash=hash_passcode(payload.passcode),
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
-    elif not verify_passcode(payload.passcode, user.passcode_hash):
+        try:
+            db.commit()
+        except IntegrityError:
+            # A double-tap or retry created this account a moment ago; treat
+            # this request as a returning sign-in against that row.
+            db.rollback()
+            user = db.scalar(select(User).where(User.identifier == identifier))
+            fresh = False
+        else:
+            db.refresh(user)
+            fresh = True
+    else:
+        fresh = False
+
+    if not fresh and (
+        user is None or not verify_passcode(payload.passcode, user.passcode_hash)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Those sign-in details weren't accepted.",

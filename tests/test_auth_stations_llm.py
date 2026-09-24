@@ -131,3 +131,27 @@ def test_overlong_passcode_is_rejected_not_500(client):
     )
 
     assert response.status_code == 422
+
+
+def test_simultaneous_first_logins_do_not_500(client, monkeypatch):
+    """A double-tap creates the account once; the loser of the race still signs in."""
+    from app.api.v1.endpoints import auth as auth_module
+
+    client.post("/api/v1/auth/login", json={"identifier": "race@mail.com", "passcode": "p"})
+
+    real_select = auth_module.select
+    calls = {"n": 0}
+
+    def flaky_select(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:  # the pre-insert lookup misses, as in a real race
+            return real_select(auth_module.User).where(auth_module.User.id == "nope")
+        return real_select(*args, **kwargs)
+
+    monkeypatch.setattr(auth_module, "select", flaky_select)
+    response = client.post(
+        "/api/v1/auth/login", json={"identifier": "race@mail.com", "passcode": "p"}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["user"]["identifier"] == "race@mail.com"

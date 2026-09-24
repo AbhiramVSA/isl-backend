@@ -133,3 +133,49 @@ def test_created_at_is_returned_with_a_timezone(client, auth_headers, submission
 
     # "2026-08-14T02:59:11Z" must not come back as the naive "2026-08-14T02:59:11".
     assert body["created_at"] in ("2026-08-14T02:59:11Z", "2026-08-14T02:59:11+00:00")
+
+
+def test_reference_code_collision_is_retried_not_500(
+    client, auth_headers, submission, monkeypatch
+):
+    """The unique reference code is short; a clash must be invisible to the caller."""
+    from app.api.v1.endpoints import reports as reports_module
+
+    first = client.post("/api/v1/reports", json=submission, headers=auth_headers).json()
+
+    codes = iter([first["reference_code"], "SOS-FRESH001"])
+    monkeypatch.setattr(reports_module, "new_reference_code", lambda _id: next(codes))
+    second = client.post(
+        "/api/v1/reports", json={**submission, "client_id": "other"}, headers=auth_headers
+    )
+
+    assert second.status_code == 201, second.text
+    assert second.json()["reference_code"] == "SOS-FRESH001"
+
+
+def test_concurrent_duplicate_submission_returns_the_first_record(
+    client, auth_headers, submission, monkeypatch
+):
+    """Two retries in flight: the second gets the record the first filed, not a 500."""
+    from app.api.v1.endpoints import reports as reports_module
+
+    first = client.post("/api/v1/reports", json=submission, headers=auth_headers).json()
+
+    # Make the pre-insert lookup miss once, as it would if the first request had
+    # not yet committed, so the INSERT hits uq_report_user_client.
+    real_select = reports_module.select
+    calls = {"n": 0}
+
+    def flaky_select(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return real_select(reports_module.Report).where(
+                reports_module.Report.id == "nope"
+            )
+        return real_select(*args, **kwargs)
+
+    monkeypatch.setattr(reports_module, "select", flaky_select)
+    second = client.post("/api/v1/reports", json=submission, headers=auth_headers)
+
+    assert second.status_code == 200, second.text
+    assert second.json()["id"] == first["id"]
