@@ -4,6 +4,10 @@ __pycache__/
 .pytest_cache/
 *.pyc
 *.db
+*.db-shm
+*.db-wal
+build.log
+.pnpm-store/
 backend/uploads/
 backend/recordings/
 frontend/node_modules/

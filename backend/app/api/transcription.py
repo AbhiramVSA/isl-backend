@@ -4,10 +4,12 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+import httpx
 
 from app.core.config import settings
 from app.db import get_db
@@ -15,7 +17,7 @@ from app.dependencies import Principal, require_officer, require_user
 from app.models import ReportHistory, StreamSession
 from app.services.realtime import realtime_hub
 from app.services.reports import get_report
-from app.services.transcription import HOLISTIC_MODEL, transcribe_video
+from app.services.transcription import transcribe_video
 
 
 class Alternative(BaseModel):
@@ -45,14 +47,33 @@ ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
 VIDEO_SUFFIXES = {"video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov"}
 
 
-@router.get("/officer/transcription/model", response_class=FileResponse, include_in_schema=False)
+@router.get("/officer/transcription/model", include_in_schema=False)
 async def get_holistic_model(
     _principal: Principal = Depends(require_officer),
-) -> FileResponse:
-    if not HOLISTIC_MODEL.is_file():
+) -> StreamingResponse:
+    # The .task bundle lives in the isl-recognition-safety service, which
+    # downloads it from Google storage via scripts/download_models.py and
+    # serves it at GET /models/holistic_landmarker.task. Proxy it so this
+    # repo never stores a duplicate 13 MB binary.
+    url = settings.isl_recognition_url.rstrip("/") + "/models/holistic_landmarker.task"
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            upstream = await client.get(url)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=503, detail="The landmark model is not installed."
+        ) from exc
+    if upstream.status_code != 200:
         raise HTTPException(status_code=503, detail="The landmark model is not installed.")
-    return FileResponse(
-        HOLISTIC_MODEL,
+
+    async def body():
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            async with client.stream("GET", url) as response:
+                async for chunk in response.aiter_bytes(1 << 16):
+                    yield chunk
+
+    return StreamingResponse(
+        body(),
         media_type="application/octet-stream",
         headers={"Cache-Control": "private, max-age=3600"},
     )

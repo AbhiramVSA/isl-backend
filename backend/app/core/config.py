@@ -23,9 +23,7 @@ class Settings(BaseSettings):
     recording_dir: Path = Path("recordings")
     development_global_officer_queue: bool = True
 
-    # Recognition backend. ``safety`` points at the isl-recognition-safety
-    # service; ``legacy`` keeps the exp1 subprocess available as a fallback.
-    transcription_backend: str = "safety"
+    # Recognition backend points at the isl-recognition-safety service.
     isl_recognition_url: str = "http://isl:8000"
     isl_recognition_timeout_seconds: float = 180.0
     isl_recognition_poll_seconds: float = 0.5
