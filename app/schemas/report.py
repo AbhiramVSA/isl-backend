@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -95,6 +95,13 @@ class ReportResponse(BaseModel):
     reporter_name: str
     source: str
     generated_by: str
+
+    @field_validator("created_at")
+    @classmethod
+    def _as_utc(cls, value: datetime) -> datetime:
+        # Stored as UTC; SQLite returns it naive, so restate the zone on the
+        # way out or the app would parse "02:59:11" as local time.
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 class ReportListResponse(BaseModel):

@@ -121,3 +121,13 @@ def test_health_still_reports_the_recogniser(client):
 
     assert body["status"] == "ok"
     assert "model_loaded" in body
+
+
+def test_overlong_passcode_is_rejected_not_500(client):
+    """bcrypt refuses more than 72 bytes; that must be a 422, not a crash."""
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "long@mail.com", "passcode": "p" * 73},
+    )
+
+    assert response.status_code == 422

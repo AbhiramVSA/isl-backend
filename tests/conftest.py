@@ -8,6 +8,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 os.environ.setdefault("SECRET_KEY", "test-secret")
+# Startup runs create_all on the app's own engine; keep that away from a real
+# database (and from leaving an app.db in the repo).
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402

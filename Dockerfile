@@ -35,8 +35,13 @@ RUN mkdir -p ml_models && \
       "https://raw.githubusercontent.com/Sooryak12/Indian-Sign-Language-Recognition/pycode/lstm-model/170-0.83.hdf5"
 
 COPY app ./app
+# Station directory; replace or bind-mount over it for the real one.
+COPY data ./data
 
-RUN useradd --create-home appuser
+# SQLite lives under /data so docker-compose.yml can keep it in a named volume
+# across rebuilds. appuser must own the directory to create the file.
+RUN useradd --create-home appuser && mkdir -p /data && chown appuser:appuser /data
+ENV DATABASE_URL=sqlite:////data/app.db
 USER appuser
 
 EXPOSE 8000

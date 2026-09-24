@@ -124,3 +124,12 @@ def test_reports_are_not_readable_by_another_account(client, auth_headers, submi
 def test_reports_require_authentication(client, submission):
     assert client.post("/api/v1/reports", json=submission).status_code == 401
     assert client.get("/api/v1/reports").status_code == 401
+
+
+def test_created_at_is_returned_with_a_timezone(client, auth_headers, submission):
+    body = client.post(
+        "/api/v1/reports", json=submission, headers=auth_headers
+    ).json()
+
+    # "2026-08-14T02:59:11Z" must not come back as the naive "2026-08-14T02:59:11".
+    assert body["created_at"] in ("2026-08-14T02:59:11Z", "2026-08-14T02:59:11+00:00")
