@@ -29,8 +29,14 @@ class HolisticExtractor:
         if not model_path.exists():
             raise FileNotFoundError(f"HolisticLandmarker model missing: {model_path} (download from {MODEL_URL})")
         self._mp = mp
+        # CPU delegate: on macOS arm64 the Metal/GPU path aborts the process at
+        # graph init on several mediapipe builds, and the browser client uses
+        # CPU anyway.
         opts = HolisticLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=str(model_path)),
+            base_options=BaseOptions(
+                model_asset_path=str(model_path),
+                delegate=BaseOptions.Delegate.CPU,
+            ),
             running_mode=RunningMode.VIDEO,
             min_face_detection_confidence=0.3,
             min_pose_detection_confidence=0.5,

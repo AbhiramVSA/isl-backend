@@ -21,7 +21,6 @@ services:
       UPLOAD_DIR: /data/uploads
       RECORDING_DIR: /data/recordings
       LIVEKIT_URL: ws://livekit:7880
-      TRANSCRIPTION_BACKEND: ${TRANSCRIPTION_BACKEND:-safety}
       ISL_RECOGNITION_URL: ${ISL_RECOGNITION_URL:-http://isl:8000}
     ports: ["8000:8000"]
     volumes:

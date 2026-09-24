@@ -4,7 +4,12 @@
 torch>=2.4
 numpy>=2,<3
 scipy>=1.13
-mediapipe==1.0.1
+# 0.10.35, not 1.0.1: on macOS arm64 the 1.0.x wheel aborts the process at
+# Metal graph init (even with the CPU delegate), and 0.10.14-0.10.21 abort on
+# the second HolisticLandmarker call. 0.10.35 verified in-process with torch
+# loaded, VIDEO mode, 15 real webcam frames. 0.10.33+ is also the first line
+# with the Tasks HolisticLandmarker per docs/models.md.
+mediapipe==0.10.35
 opencv-contrib-python>=4.10
 fastapi>=0.115
 uvicorn[standard]>=0.30
