@@ -1,6 +1,0 @@
-# Keep the real local.properties file out of source control.
-sdk.dir=/path/to/Android/sdk
-
-# Optional. These fields enable the debug-only auto-login button.
-DEBUG_LOGIN_EMAIL=your-debug-account@example.test
-DEBUG_LOGIN_PASSWORD=your-local-debug-password
