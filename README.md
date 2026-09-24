@@ -174,6 +174,12 @@ Then deploy (needs Docker with the compose plugin):
 ```bash
 git clone <repo-url> isl-backend
 cd isl-backend
+
+# Secrets live in a .env next to docker-compose.yml (never in the image).
+# SECRET_KEY is required — with the built-in default anyone can mint tokens.
+python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(48))" > .env
+# optional: echo "NVIDIA_NIM_API_KEY=nvapi-..." >> .env
+
 docker compose up -d --build
 
 # wait for startup (TensorFlow import takes a while), then verify:
@@ -193,8 +199,19 @@ Useful afterwards:
 ```bash
 docker compose logs -f          # tail logs
 docker compose up -d --build    # redeploy after git pull
-docker compose down             # stop
+docker compose down             # stop (keeps the database)
+docker compose down -v          # stop AND delete users + reports
 ```
+
+The SQLite database (users, reports) lives in the `isl-data` named volume at
+`/data/app.db` inside the container, so it survives rebuilds. Back it up with
+`docker cp isl-backend:/data/app.db ./app.db.bak`. Set `DATABASE_URL` in `.env`
+to use Postgres instead.
+
+The bundled station directory is copied into the image from `data/`. To use the
+real one without committing it, bind-mount it and point `STATIONS_FILE` at it:
+add `- ./police_stations.local.json:/app/data/police_stations.local.json:ro`
+under `volumes:` and `STATIONS_FILE=data/police_stations.local.json` in `.env`.
 
 ### For the sysadmin (domain mapping)
 
