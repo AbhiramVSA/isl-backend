@@ -17,13 +17,19 @@ httpx
 # These are the only reason the service needs Python 3.9-3.11. Everything else
 # (auth, reports, stations, the LLM proxy) runs on any modern Python — see
 # requirements-api.txt if you only want the API half.
-tensorflow==2.15.1
-mediapipe==0.10.2
+# [and-cuda] bundles the CUDA 12.2/cuDNN 8.9 runtime as pip packages (Linux
+# wheels only, hence the markers) so the Docker image runs on GPU without a
+# CUDA base image. 2.15.1 specifically fixed and-cuda library discovery.
+tensorflow[and-cuda]==2.15.1; sys_platform == "linux"
+tensorflow==2.15.1; sys_platform != "linux"
+# Upstream used 0.10.2, which ships no Linux wheels for py3.11; 0.10.5 is the
+# closest release that does, with the same legacy Holistic solution API.
+mediapipe==0.10.5
 sk-video==1.1.10
 scipy
 numpy<2
 
-# Optional — uncomment when you actually need them
+# Optional â€” uncomment when you actually need them
 # celery
 # redis
 # psycopg2-binary       # Postgres driver (NeonDB)
