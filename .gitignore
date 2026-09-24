@@ -10,3 +10,6 @@ ml_models/*
 # Editor config
 .vscode/
 .idea/
+
+# Local station overrides (keep real contact data out of git)
+data/police_stations.local.json

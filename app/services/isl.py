@@ -21,11 +21,14 @@ if not hasattr(np, "float"):
     np.int = np.int_
 import skvideo.io  # noqa: E402
 
+from app.core.media import ALLOWED_VIDEO_EXTENSIONS
+
 ACTIONS = ["Hello", "How are you", "thank you"]
 SEQUENCE_LENGTH = 45
 N_FEATURES = 258  # 33*4 pose + 21*3 left hand + 21*3 right hand landmarks
 
-ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov"}
+# Re-exported for anything that already imports it from here.
+ALLOWED_EXTENSIONS = ALLOWED_VIDEO_EXTENSIONS
 
 
 def _build_model():

@@ -1,0 +1,71 @@
+{
+  "_comment": [
+    "PLACEHOLDER DIRECTORY — the phone numbers below are not real.",
+    "A wrong number on an emergency screen is worse than no number at all, so",
+    "this file must be replaced with the Andhra Pradesh Police station directory",
+    "before the app reaches any actual user. Coordinates are real; contacts are not.",
+    "Set STATIONS_FILE to point somewhere else if you keep the real data outside the repo."
+  ],
+  "stations": [
+    {
+      "id": "ps-thullur",
+      "name": "Thullur Police Station",
+      "address": "Thullur, Guntur District",
+      "latitude": 16.5261,
+      "longitude": 80.4694,
+      "phone": "+91 863 225 1100",
+      "open_now": true,
+      "sign_language_officer": true
+    },
+    {
+      "id": "ps-mangalagiri",
+      "name": "Mangalagiri Town Police Station",
+      "address": "NH-16 Service Rd, Mangalagiri",
+      "latitude": 16.4307,
+      "longitude": 80.568,
+      "phone": "+91 863 225 3300",
+      "open_now": true,
+      "sign_language_officer": false
+    },
+    {
+      "id": "ps-tadepalli",
+      "name": "Tadepalli Police Station",
+      "address": "Tadepalli, Guntur District",
+      "latitude": 16.479,
+      "longitude": 80.605,
+      "phone": "+91 863 224 7788",
+      "open_now": true,
+      "sign_language_officer": true
+    },
+    {
+      "id": "ps-amaravathi-town",
+      "name": "Amaravathi Police Station",
+      "address": "Amaravathi Town, Palnadu District",
+      "latitude": 16.5745,
+      "longitude": 80.358,
+      "phone": "+91 863 253 4400",
+      "open_now": false,
+      "sign_language_officer": false
+    },
+    {
+      "id": "ps-undavalli",
+      "name": "Undavalli Police Outpost",
+      "address": "Undavalli Centre, Tadepalli Mandal",
+      "latitude": 16.4952,
+      "longitude": 80.5772,
+      "phone": "+91 863 224 9010",
+      "open_now": true,
+      "sign_language_officer": false
+    },
+    {
+      "id": "ps-ibrahimpatnam",
+      "name": "Ibrahimpatnam Police Station",
+      "address": "Ibrahimpatnam, NTR District",
+      "latitude": 16.586,
+      "longitude": 80.539,
+      "phone": "+91 866 245 6600",
+      "open_now": true,
+      "sign_language_officer": true
+    }
+  ]
+}
