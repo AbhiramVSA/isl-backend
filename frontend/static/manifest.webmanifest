@@ -1,10 +1,10 @@
 {
-  "name": "Sign Response for Officers",
-  "short_name": "Sign Response",
-  "description": "Officer response for deaf and hard-of-hearing people",
+  "name": "Equal Responder Console",
+  "short_name": "Equal",
+  "description": "Emergency response for Deaf and non-speaking people",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#f4f6f7",
-  "theme_color": "#153b50",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+  "background_color": "#f3f5f6",
+  "theme_color": "#123446",
+  "icons": [{ "src": "/cid-seal.png", "sizes": "256x256", "type": "image/png", "purpose": "any" }, { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }]
 }

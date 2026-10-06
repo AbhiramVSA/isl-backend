@@ -8,7 +8,9 @@ from fastapi.responses import JSONResponse
 
 from app.api import (
     admin,
+    admin_reports,
     auth,
+    live,
     mobile,
     mobile_stream,
     officer_reports,
@@ -24,6 +26,10 @@ from app.db import Base, engine
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    if settings.environment == "production" and (
+        settings.secret_key == "development-only-change-me" or len(settings.secret_key) < 32
+    ):
+        raise RuntimeError("Set SECRET_KEY to a random value of at least 32 characters")
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     settings.recording_dir.mkdir(parents=True, exist_ok=True)
     if settings.environment == "test":
@@ -33,9 +39,13 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(
-    title="Incident Response API",
+    title="Equal API",
     version="1.0.0",
-    description="Secure mobile reporting and officer response API. All report access is scoped to the signed-in user or responsible office.",
+    description=(
+        "Equal: emergency reporting for Deaf and non-speaking people, and the responder "
+        "console behind it. Report access is scoped to the signed-in reporter or the "
+        "responsible office; management is gated by role permissions."
+    ),
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -99,6 +109,8 @@ for api_router in (
     streams.router,
     transcription.router,
     admin.router,
+    admin_reports.router,
+    live.router,
     websocket.router,
 ):
     app.include_router(api_router, prefix="/api/v1")

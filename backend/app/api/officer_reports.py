@@ -8,11 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.permissions import Permission
 from app.db import get_db
-from app.dependencies import Principal, require_officer
+from app.dependencies import Principal, audit, require_officer
 from app.models import (
-    AuditLog,
-    OfficeMembership,
     Priority,
     Report,
     ReportHistory,
@@ -45,7 +44,7 @@ router = APIRouter(prefix="/officer", tags=["Officer reports"])
 
 
 def authorize(report: Report, principal: Principal) -> None:
-    if report.office_id not in principal.office_ids and principal.account.role.value != "ADMIN":
+    if not principal.can_access_office(report.office_id):
         raise HTTPException(status_code=403, detail="You do not have access to this report")
 
 
@@ -59,31 +58,36 @@ async def list_reports(
     priority: Priority | None = None,
     category: str | None = None,
     search: str | None = None,
+    office_id: int | None = None,
+    assigned: Literal["me", "unassigned", "any"] = Query("any"),
     scope: Literal["office", "all"] = Query("office"),
     principal: Principal = Depends(require_officer),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedReports:
     if scope == "all":
-        can_view_all = principal.account.role.value == "ADMIN" or (
+        can_view_all = principal.global_scope or (
             settings.environment == "development" and settings.development_global_officer_queue
         )
         if not can_view_all:
             raise HTTPException(status_code=403, detail="Viewing every office is not enabled")
         query = select(Report)
     else:
-        office_ids = principal.office_ids
-        # In development, the principal can access the global queue. Keep the
-        # default view limited to the officer's real office memberships so the
-        # explicit All Database Reports switch has a useful, predictable scope.
-        if principal.officer and principal.account.role.value != "ADMIN":
-            ids = await db.scalars(
-                select(OfficeMembership.office_id).where(
-                    OfficeMembership.officer_id == principal.officer.id,
-                    OfficeMembership.active.is_(True),
-                )
-            )
-            office_ids = tuple(ids.all())
+        # "My offices" is real membership, even when the development global
+        # queue widens what the principal may open. Global roles without a
+        # membership fall back to everything they can see.
+        office_ids = principal.member_office_ids or (
+            principal.office_ids if principal.global_scope else ()
+        )
         query = select(Report).where(Report.office_id.in_(office_ids))
+    if office_id is not None:
+        if not principal.can_access_office(office_id):
+            raise HTTPException(status_code=403, detail="You do not have access to this office")
+        query = query.where(Report.office_id == office_id)
+    if assigned == "me":
+        officer_id = principal.officer.id if principal.officer else -1
+        query = query.where(Report.assigned_officer_id == officer_id)
+    elif assigned == "unassigned":
+        query = query.where(Report.assigned_officer_id.is_(None))
     if status_filter:
         query = query.where(Report.status == status_filter)
     if priority:
@@ -91,8 +95,14 @@ async def list_reports(
     if category:
         query = query.where(Report.category == category)
     if search:
+        term = f"%{search.strip()}%"
         query = query.where(
-            or_(Report.category.ilike(f"%{search}%"), Report.description.ilike(f"%{search}%"))
+            or_(
+                Report.category.ilike(term),
+                Report.description.ilike(term),
+                Report.reference_code.ilike(term),
+                Report.public_id.ilike(term),
+            )
         )
     total = await db.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = await db.scalars(
@@ -118,15 +128,7 @@ async def detail(
 ) -> Report:
     report = await get_report(db, public_id)
     authorize(report, principal)
-    db.add(
-        AuditLog(
-            actor_type="OFFICER",
-            actor_id=principal.officer.id if principal.officer else None,
-            action="REPORT_VIEWED",
-            target_type="REPORT",
-            target_id=public_id,
-        )
-    )
+    db.add(audit(principal, "REPORT_VIEWED", "REPORT", public_id))
     await db.commit()
     return report
 
@@ -161,15 +163,7 @@ async def reporter_details(
     )
     active = sum(row.status not in {ReportStatus.RESOLVED, ReportStatus.CANCELLED} for row in rows)
     resolved = sum(row.status == ReportStatus.RESOLVED for row in rows)
-    db.add(
-        AuditLog(
-            actor_type="OFFICER",
-            actor_id=principal.officer.id if principal.officer else None,
-            action="REPORTER_DETAILS_VIEWED",
-            target_type="REPORT",
-            target_id=public_id,
-        )
-    )
+    db.add(audit(principal, "REPORTER_DETAILS_VIEWED", "REPORT", public_id))
     await db.commit()
     return ReporterDetails(
         name=user.name,
@@ -261,7 +255,9 @@ async def report_videos(
             videos.append(
                 ReportVideoOut(
                     id=f"upload-{media.id}",
-                    label="Submitted video",
+                    label="Signing video from the Equal app"
+                    if media.uploaded_by == "live-stream"
+                    else "Submitted video",
                     mime_type=media.mime_type,
                     size=media.size,
                     created_at=media.created_at,
@@ -305,16 +301,7 @@ async def play_report_video(
             mime_type = media.mime_type
     if not path or not path.is_file():
         raise HTTPException(status_code=404, detail="Video not found")
-    db.add(
-        AuditLog(
-            actor_type="OFFICER",
-            actor_id=principal.officer.id if principal.officer else None,
-            action="SAVED_VIDEO_VIEWED",
-            target_type="REPORT",
-            target_id=public_id,
-            audit_metadata={"video_id": video_id},
-        )
-    )
+    db.add(audit(principal, "SAVED_VIDEO_VIEWED", "REPORT", public_id, {"video_id": video_id}))
     await db.commit()
     return FileResponse(path, media_type=mime_type)
 
@@ -385,10 +372,12 @@ async def related(
 async def apply_action(
     public_id: str, action: str, principal: Principal, db: AsyncSession
 ) -> Report:
+    if not principal.can(Permission.REPORTS_RESPOND):
+        raise HTTPException(status_code=403, detail="Your role cannot respond to reports")
     if not principal.officer:
         raise HTTPException(status_code=403, detail="An officer profile is required")
     report = await transition_report(
-        db, public_id, principal.officer.id, principal.office_ids, action
+        db, public_id, principal.officer.id, principal.office_ids, action, principal.account.id
     )
     await realtime_hub.office_event(
         report.office_id,

@@ -29,9 +29,7 @@ async def session_for(db: AsyncSession, report_id: int, room_name: str) -> Strea
 def authorize(report, principal: Principal, user_owner: bool = True) -> None:
     if principal.user and user_owner and report.user_id == principal.user.id:
         return
-    if principal.officer and report.office_id in principal.office_ids:
-        return
-    if principal.account.role.value == "ADMIN":
+    if principal.account.role.value != "USER" and principal.can_access_office(report.office_id):
         return
     raise HTTPException(
         status_code=403, detail="You do not have access to live video for this report"
@@ -133,7 +131,7 @@ async def request_video(
     db.add(
         AuditLog(
             actor_type="OFFICER",
-            actor_id=principal.officer.id if principal.officer else None,
+            actor_id=principal.account.id,
             action="VIDEO_REQUESTED",
             target_type="REPORT",
             target_id=public_id,
@@ -268,7 +266,7 @@ async def get_stream(
         db.add(
             AuditLog(
                 actor_type="OFFICER",
-                actor_id=principal.officer.id,
+                actor_id=principal.account.id,
                 action="LIVE_VIDEO_VIEWED",
                 target_type="REPORT",
                 target_id=public_id,

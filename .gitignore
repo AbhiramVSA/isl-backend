@@ -19,3 +19,6 @@ android/**/build/
 android/.idea/
 *.jks
 *.keystore
+
+# Local database backups (contain real account data)
+*.db.backup*

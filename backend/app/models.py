@@ -26,9 +26,12 @@ def now() -> datetime:
 
 
 class Role(str, enum.Enum):
-    USER = "USER"
+    USER = "USER"  # a reporter on the Equal app
     OFFICER = "OFFICER"
-    ADMIN = "ADMIN"
+    DISPATCHER = "DISPATCHER"
+    OFFICE_ADMIN = "OFFICE_ADMIN"
+    AUDITOR = "AUDITOR"
+    ADMIN = "ADMIN"  # super admin; value kept for existing tokens and rows
 
 
 class AccountStatus(str, enum.Enum):
@@ -58,7 +61,7 @@ class Account(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[Role] = mapped_column(Enum(Role, native_enum=False), index=True)
+    role: Mapped[Role] = mapped_column(Enum(Role, native_enum=False, length=20), index=True)
     status: Mapped[AccountStatus] = mapped_column(
         Enum(AccountStatus, native_enum=False), default=AccountStatus.ACTIVE
     )

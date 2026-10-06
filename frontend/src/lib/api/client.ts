@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/public';
-import { auth } from '$lib/auth.svelte';
+import { auth, type Profile } from '$lib/auth.svelte';
 
 const base = env.PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -34,3 +34,35 @@ export async function api<T>(path: string, options: RequestInit = {}, retry = tr
 }
 
 export { base };
+
+/** Build a query string, leaving out empty values. */
+export function qs(params: Record<string, string | number | boolean | null | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (value !== '' && value !== null && value !== undefined && value !== false) search.set(key, String(value));
+  const text = search.toString();
+  return text ? `?${text}` : '';
+}
+
+/** Fetch an authenticated file and hand it to the browser as a download. */
+export async function download(path: string, fallbackName: string): Promise<void> {
+  const send = () => fetch(`${base}${path}`, { headers: auth.accessToken ? { Authorization: `Bearer ${auth.accessToken}` } : {} });
+  let response: Response;
+  try { response = await send(); if (response.status === 401 && await refreshAccess()) response = await send(); }
+  catch { throw new FriendlyError('Connection lost. Check your network and try again.', 0); }
+  if (!response.ok) { const body = await response.json().catch(() => ({})); throw new FriendlyError(body.detail || 'The download could not be prepared.', response.status); }
+  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function loadProfile(): Promise<Profile> {
+  const me = await api<Profile>('/auth/me');
+  auth.setProfile(me);
+  return me;
+}
+
+export function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}

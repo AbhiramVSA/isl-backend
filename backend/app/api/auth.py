@@ -1,24 +1,31 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, select
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.permissions import ROLE_LABELS, STAFF_ROLES, permissions_for
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.db import get_db
-from app.dependencies import Principal, current_principal
+from app.dependencies import Principal, audit, current_principal
 from app.models import (
     Account,
     AccountStatus,
     AuditLog,
     Office,
-    OfficeMembership,
     RefreshToken,
     Role,
     User,
 )
-from app.schemas import Identity, LoginRequest, RefreshRequest, TokenPair, UserRegister
+from app.schemas import (
+    Identity,
+    LoginRequest,
+    PasswordChange,
+    RefreshRequest,
+    TokenPair,
+    UserRegister,
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -43,7 +50,17 @@ async def issue_tokens(db: AsyncSession, account: Account) -> TokenPair:
     )
 
 
-async def login(db: AsyncSession, data: LoginRequest, expected_roles: set[Role]) -> TokenPair:
+async def revoke_refresh_tokens(db: AsyncSession, account_id: int) -> None:
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.account_id == account_id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(UTC))
+    )
+
+
+async def login(
+    db: AsyncSession, data: LoginRequest, expected_roles: set[Role] | frozenset[Role]
+) -> TokenPair:
     account = await db.scalar(select(Account).where(Account.email == data.email.lower()))
     if (
         not account
@@ -108,10 +125,10 @@ async def user_login(data: LoginRequest, db: AsyncSession = Depends(get_db)) -> 
 
 
 @router.post(
-    "/officers/login", response_model=TokenPair, summary="Sign in to the officer application"
+    "/officers/login", response_model=TokenPair, summary="Sign in to the responder console"
 )
 async def officer_login(data: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenPair:
-    return await login(db, data, {Role.OFFICER, Role.ADMIN})
+    return await login(db, data, STAFF_ROLES)
 
 
 @router.post("/refresh", response_model=TokenPair, summary="Rotate a refresh token")
@@ -146,29 +163,48 @@ async def me(
 ) -> Identity:
     profile = principal.user or principal.officer
     office_names: list[str] = []
-    office_ids = principal.office_ids
-    if principal.officer and principal.account.role != Role.ADMIN:
-        ids = await db.scalars(
-            select(OfficeMembership.office_id).where(
-                OfficeMembership.officer_id == principal.officer.id,
-                OfficeMembership.active.is_(True),
-            )
-        )
-        office_ids = tuple(ids.all())
-    if office_ids:
+    if principal.member_office_ids:
         office_names = list(
             (
                 await db.scalars(
-                    select(Office.name).where(Office.id.in_(office_ids)).order_by(Office.name)
+                    select(Office.name)
+                    .where(Office.id.in_(principal.member_office_ids))
+                    .order_by(Office.name)
                 )
             ).all()
         )
+    role = principal.account.role
     return Identity(
         id=profile.id if profile else principal.account.id,
-        role=principal.account.role,
+        account_id=principal.account.id,
+        role=role,
+        role_label=ROLE_LABELS[role],
+        permissions=sorted(item.value for item in permissions_for(role)),
+        global_scope=principal.global_scope,
         name=profile.name if profile else "Administrator",
         email=principal.account.email,
         offices=office_names,
+        office_ids=list(principal.member_office_ids),
         phone=(profile.phone if principal.user else principal.account.phone),
         created_at=principal.account.created_at,
+        last_login_at=principal.account.last_login_at,
     )
+
+
+@router.post("/password", status_code=204, summary="Change your own password")
+async def change_password(
+    data: PasswordChange,
+    request: Request,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    if not verify_password(data.current_password, principal.account.password_hash):
+        raise HTTPException(status_code=400, detail="Your current password is incorrect")
+    if data.current_password == data.new_password:
+        raise HTTPException(status_code=400, detail="Choose a password you have not used here")
+    principal.account.password_hash = hash_password(data.new_password)
+    # Other signed-in devices keep their access token until it expires (15 min)
+    # but cannot refresh.
+    await revoke_refresh_tokens(db, principal.account.id)
+    db.add(audit(principal, "PASSWORD_CHANGED", "ACCOUNT", principal.account.id, request=request))
+    await db.commit()

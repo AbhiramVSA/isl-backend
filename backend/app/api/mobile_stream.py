@@ -25,8 +25,9 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from sqlalchemy import delete, select
 
 from app.core.config import settings
+from app.core.security import decode_token
 from app.db import SessionLocal
-from app.models import StreamDraft
+from app.models import Account, AccountStatus, Role, StreamDraft, User
 from app.schemas_mobile import StreamDraftResponse
 from app.services.isl_stream import (
     ISL_DOWN_MESSAGE,
@@ -40,6 +41,8 @@ from app.services.isl_stream import (
     tokens_match,
     validate_client_message,
 )
+from app.services.live_relay import LiveSession, live_hub
+from app.services.stream_media import discard_stream_media
 
 log = logging.getLogger(__name__)
 
@@ -60,10 +63,42 @@ def _as_utc(value: datetime) -> datetime:
 async def _purge_expired_drafts() -> None:
     try:
         async with SessionLocal() as db:
+            expired = list(
+                (
+                    await db.scalars(select(StreamDraft).where(StreamDraft.expires_at <= _now()))
+                ).all()
+            )
+            for draft in expired:
+                # Filed streams keep their MP4 (it belongs to the report); the rest go.
+                await discard_stream_media(db, draft.stream_id, keep_if_linked=True)
             await db.execute(delete(StreamDraft).where(StreamDraft.expires_at <= _now()))
             await db.commit()
     except Exception:
         log.exception("stream draft purge failed")
+
+
+@router.delete(
+    "/api/v1/stream/{stream_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Discard a recording the caller decided not to send",
+)
+async def discard_stream(stream_id: str, token: str = Query(min_length=1, max_length=256)) -> None:
+    """Deletes the draft, its frames and its video. Same 404 rules as the draft fetch.
+
+    A stream already attached to a filed report is not deleted: the report owns
+    it now, and a responder may already be watching it.
+    """
+    async with SessionLocal() as db:
+        draft = await db.scalar(select(StreamDraft).where(StreamDraft.stream_id == stream_id))
+        if draft is None or not tokens_match(token, draft.secret_hash):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
+        if not await discard_stream_media(db, stream_id, keep_if_linked=True):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This recording is already part of a filed report.",
+            )
+        await db.delete(draft)
+        await db.commit()
 
 
 @router.get(
@@ -114,6 +149,25 @@ async def stream_video(websocket: WebSocket) -> None:
     await _serve_stream(websocket, kind="video")
 
 
+async def _caller(websocket: WebSocket) -> tuple[int | None, str | None]:
+    """The signed-in caller, when the app passes its token; streams stay open to anyone."""
+    token = websocket.query_params.get("access_token")
+    if not token:
+        return None, None
+    try:
+        payload = decode_token(token)
+        if payload.get("role") != Role.USER.value:
+            return None, None
+        async with SessionLocal() as db:
+            account = await db.get(Account, int(payload["sub"]))
+            if not account or account.status != AccountStatus.ACTIVE:
+                return None, None
+            user = await db.scalar(select(User).where(User.account_id == account.id))
+            return (user.id, user.name) if user else (None, None)
+    except Exception:
+        return None, None
+
+
 async def _serve_stream(websocket: WebSocket, *, kind: str) -> None:
     ip = websocket.client.host if websocket.client else "unknown"
     if kind == "video":
@@ -143,8 +197,13 @@ async def _serve_stream(websocket: WebSocket, *, kind: str) -> None:
     throttle = InboundThrottle(max_fps)
     isl = None
     bytes_in = 0
+    live: LiveSession | None = None
     try:
         await websocket.accept()
+        if kind == "video":
+            # Responders can watch (and rewind) camera streams; landmark streams carry no picture.
+            user_id, name = await _caller(websocket)
+            live = live_hub.start(stream_id, user_id, name)
         # Draft row first: the hello already promises it, and the phone may
         # fetch it even if the recogniser never answers.
         try:
@@ -249,6 +308,11 @@ async def _serve_stream(websocket: WebSocket, *, kind: str) -> None:
                 except ValueError as exc:
                     await _send_error(websocket, f"bad message: {exc}")
                     continue
+                if clean.get("type") == "motion":
+                    # Phone movement is for responders, not the sign model.
+                    if live is not None:
+                        await live_hub.push_motion(live, clean["samples"])
+                    continue
                 if clean.get("type") == "control":
                     if clean.get("action") == "reset":
                         for key in list(accumulator.sentences):
@@ -262,6 +326,8 @@ async def _serve_stream(websocket: WebSocket, *, kind: str) -> None:
                     continue
                 if not throttle.allow():
                     continue
+                if live is not None and clean.get("type") == "frame":
+                    await live_hub.push_frame(live, float(clean.get("t_ms") or 0), clean["jpeg"])
                 try:
                     await isl.send(json.dumps(clean))
                 except Exception:
@@ -285,6 +351,8 @@ async def _serve_stream(websocket: WebSocket, *, kind: str) -> None:
                         continue
                     if msg.get("type") == "update":
                         accumulator.add_snapshot(msg)
+                        if live is not None:
+                            await live_hub.push_update(live, msg)
                     elif msg.get("type") != "error":
                         continue
                     try:
@@ -325,7 +393,10 @@ async def _serve_stream(websocket: WebSocket, *, kind: str) -> None:
         # Shield the wrap-up so a server shutdown racing the disconnect still
         # leaves a fetchable draft behind.
         with anyio.CancelScope(shield=True):
-            await _finish_draft(stream_id, kind, accumulator, completed=True)
+            recorded_ms = live.duration_ms if live is not None else 0
+            await _finish_draft(
+                stream_id, kind, accumulator, completed=True, recorded_ms=recorded_ms
+            )
             try:
                 await websocket.send_json(
                     {
@@ -334,7 +405,7 @@ async def _serve_stream(websocket: WebSocket, *, kind: str) -> None:
                         "transcript": accumulator.transcript,
                         "sentences": accumulator.ordered_sentences,
                         "frames_seen": accumulator.frames_seen,
-                        "duration_ms": accumulator.duration_ms,
+                        "duration_ms": max(accumulator.duration_ms, int(recorded_ms)),
                     }
                 )
             except (RuntimeError, WebSocketDisconnect):
@@ -344,6 +415,8 @@ async def _serve_stream(websocket: WebSocket, *, kind: str) -> None:
             except (RuntimeError, WebSocketDisconnect):
                 pass
     finally:
+        if live is not None:
+            live_hub.finish(live)
         if isl is not None:
             try:
                 await isl.close()
@@ -371,7 +444,12 @@ async def _send_error(websocket: WebSocket, message: str) -> None:
 
 
 async def _finish_draft(
-    stream_id: str, kind: str, accumulator: DraftAccumulator, *, completed: bool
+    stream_id: str,
+    kind: str,
+    accumulator: DraftAccumulator,
+    *,
+    completed: bool,
+    recorded_ms: float = 0,
 ) -> None:
     try:
         async with SessionLocal() as db:
@@ -383,7 +461,9 @@ async def _finish_draft(
             draft.sentences = accumulator.ordered_sentences
             draft.safety_events = accumulator.safety_events
             draft.frames_seen = accumulator.frames_seen
-            draft.duration_ms = accumulator.duration_ms
+            # The recogniser only timestamps what it read; a video it could not read
+            # still has a real length, which the report should show.
+            draft.duration_ms = max(accumulator.duration_ms, int(recorded_ms))
             draft.completed = completed
             await db.commit()
     except Exception:

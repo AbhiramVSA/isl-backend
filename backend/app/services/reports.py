@@ -69,7 +69,9 @@ def history(
     )
 
 
-async def create_report(db: AsyncSession, user_id: int, data: ReportCreate) -> Report:
+async def create_report(
+    db: AsyncSession, user_id: int, data: ReportCreate, account_id: int | None = None
+) -> Report:
     try:
         route = await routing_service.route(db, data.latitude, data.longitude)
     except LookupError as exc:
@@ -104,7 +106,7 @@ async def create_report(db: AsyncSession, user_id: int, data: ReportCreate) -> R
             ),
             AuditLog(
                 actor_type="USER",
-                actor_id=user_id,
+                actor_id=account_id,
                 action="REPORT_CREATED",
                 target_type="REPORT",
                 target_id=report.public_id,
@@ -143,7 +145,12 @@ TRANSITIONS: dict[str, tuple[set[ReportStatus], ReportStatus, str, str]] = {
 
 
 async def transition_report(
-    db: AsyncSession, public_id: str, officer_id: int, office_ids: tuple[int, ...], action: str
+    db: AsyncSession,
+    public_id: str,
+    officer_id: int,
+    office_ids: tuple[int, ...],
+    action: str,
+    account_id: int | None = None,
 ) -> Report:
     if action not in TRANSITIONS:
         raise HTTPException(status_code=400, detail="Unsupported report action")
@@ -184,7 +191,7 @@ async def transition_report(
             history(report, event, "OFFICER", officer_id, old),
             AuditLog(
                 actor_type="OFFICER",
-                actor_id=officer_id,
+                actor_id=account_id,
                 action=event,
                 target_type="REPORT",
                 target_id=public_id,

@@ -32,6 +32,11 @@ class RealtimeHub:
     async def office_event(self, office_id: int, event: dict) -> None:
         await self._send(self._office_connections.get(office_id, set()), event)
 
+    async def staff_event(self, event: dict) -> None:
+        """Every connected console, once each (a console can sit in several offices)."""
+        targets = {ws for connections in self._office_connections.values() for ws in connections}
+        await self._send(targets, event)
+
     async def user_event(self, user_id: int, event: dict) -> None:
         await self._send(self._user_connections.get(user_id, set()), event)
 

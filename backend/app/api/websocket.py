@@ -1,6 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
+from app.core.permissions import GLOBAL_SCOPE_ROLES, STAFF_ROLES
 from app.core.security import decode_token
 from app.db import SessionLocal
 from app.models import (
@@ -32,13 +33,17 @@ def websocket_token(websocket: WebSocket) -> str:
 async def officer_socket(websocket: WebSocket) -> None:
     try:
         payload = decode_token(websocket_token(websocket))
-        if payload["role"] not in {Role.OFFICER.value, Role.ADMIN.value}:
+        if payload["role"] not in {role.value for role in STAFF_ROLES}:
             raise ValueError("incorrect role")
         async with SessionLocal() as db:
             account = await db.get(Account, int(payload["sub"]))
-            if not account or account.status != AccountStatus.ACTIVE:
+            if (
+                not account
+                or account.status != AccountStatus.ACTIVE
+                or account.role.value != payload["role"]
+            ):
                 raise ValueError("inactive account")
-            if payload["role"] == Role.ADMIN.value:
+            if account.role in GLOBAL_SCOPE_ROLES:
                 ids = tuple(
                     (await db.scalars(select(Office.id).where(Office.active.is_(True)))).all()
                 )

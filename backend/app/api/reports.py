@@ -31,7 +31,7 @@ async def create(
     principal: Principal = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ) -> Report:
-    report = await create_report(db, principal.user.id, data)  # type: ignore[union-attr]
+    report = await create_report(db, principal.user.id, data, principal.account.id)  # type: ignore[union-attr]
     await realtime_hub.office_event(
         report.office_id, {"type": "report.created", "report_id": report.public_id}
     )
@@ -82,7 +82,7 @@ async def add_location(
         ReportHistory(
             report_id=report.id,
             actor_type="USER",
-            actor_id=principal.user.id,
+            actor_id=principal.account.id,
             event="LOCATION_UPDATED",
             event_metadata={},
             new_status=report.status.value,

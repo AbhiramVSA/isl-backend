@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Report } from '$lib/types';
-  import { statusLabel } from '$lib/types';
+  import { categoryLabel, statusLabel } from '$lib/types';
   import { relativeTime } from '$lib/time';
   let { report, onPick, busy = false }: { report: Report; onPick?: (report: Report) => void; busy?: boolean } = $props();
   const isAvailable = $derived(report.status === "NEW" && !report.assigned_officer);
@@ -19,7 +19,7 @@
     <span class="time">{relativeTime(report.created_at)}</span>
   </div>
   <div class="assignment" class:available={isAvailable} class:resolved={report.status === 'RESOLVED'}><span class="dot"></span>{assignmentLabel}</div>
-  <h3>{report.category}</h3>
+  <h3>{report.title || categoryLabel(report.category)}</h3>
   <p>{report.description}</p>
   <div class="card-foot"><span>{report.office.name}</span><div class="card-actions">{#if isAvailable && onPick}<button class="button" disabled={busy} onclick={() => onPick?.(report)}>{busy ? 'Taking report…' : 'Take Report'}</button>{/if}{#if report.transcript_available}<a class="button secondary" href={reportHref + "#transcript"}>View Transcript</a>{/if}<a class="button secondary" href={reportHref}>View Report</a></div></div>
 </article>

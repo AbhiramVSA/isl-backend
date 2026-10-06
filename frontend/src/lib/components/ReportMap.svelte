@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Location, Report } from '$lib/types';
+  import { categoryLabel, type Location, type Report } from '$lib/types';
   import 'maplibre-gl/dist/maplibre-gl.css';
   let { report, location = null, reports = [] }: { report?: Report; location?: Location | null; reports?: Report[] } = $props();
   let container: HTMLDivElement;
@@ -14,8 +14,13 @@
     map = new maplibre.Map({ container, center, zoom: report ? 14 : 11, style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap contributors' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] } });
     const markers = report ? [report] : reports;
     for (const item of markers) {
-      const node = document.createElement('button'); node.className = `map-marker ${item.priority.toLowerCase()}`; node.setAttribute('aria-label', `${item.priority} priority: ${item.category}`);
-      const popup = new maplibre.Popup({ offset: 18 }).setHTML(`<strong>${item.category}</strong><br>${item.priority === 'NORMAL' ? 'Normal' : item.priority} Priority<br><a href="/reports/${item.public_id}">View Report</a>`);
+      const node = document.createElement('button'); node.className = `map-marker ${item.priority.toLowerCase()}`; node.setAttribute('aria-label', `${item.priority} priority: ${categoryLabel(item.category)}`);
+      // Built as DOM, not HTML: the category is caller-supplied text.
+      const content = document.createElement('div');
+      const title = document.createElement('strong'); title.textContent = categoryLabel(item.category);
+      const link = document.createElement('a'); link.href = `/reports/${encodeURIComponent(item.public_id)}`; link.textContent = 'View report';
+      content.append(title, document.createElement('br'), `${item.priority === 'NORMAL' ? 'Normal' : item.priority} priority`, document.createElement('br'), link);
+      const popup = new maplibre.Popup({ offset: 18 }).setDOMContent(content);
       new maplibre.Marker({ element: node }).setLngLat([item.initial_longitude, item.initial_latitude]).setPopup(popup).addTo(map);
     }
     if (report && location) new maplibre.Marker({ color: '#256f83' }).setLngLat([location.longitude, location.latitude]).addTo(map);

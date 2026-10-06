@@ -96,6 +96,10 @@ class ReportSubmission(BaseModel):
     reporter_name: str = Field(default="", max_length=120)
     source: str = Field(default="sign_video")
     generated_by: str = Field(default="", max_length=60)
+    # The live stream the report was signed on (ids from the socket hello), so
+    # responders get the video. Optional: clip uploads and chat reports have none.
+    stream_id: str | None = Field(default=None, max_length=32)
+    stream_token: str | None = Field(default=None, max_length=256)
 
     @field_validator("category")
     @classmethod

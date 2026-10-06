@@ -117,17 +117,53 @@ def validate_control_message(msg: dict) -> dict:
     return msg
 
 
+MAX_MOTION_SAMPLES = 64
+# Per-axis sanity bounds: unit quaternion, linear acceleration (m/s²), angular speed (rad/s).
+MOTION_BOUNDS = {"q": (4, 1.01), "a": (3, 200.0), "g": (3, 100.0)}
+
+
+def validate_motion_message(msg: dict) -> dict:
+    """A batch of phone sensor samples taken on the same clock as the video frames.
+
+    ``{"type": "motion", "samples": [{"t_ms", "q": [x,y,z,w], "a": [x,y,z], "g": [x,y,z]}]}``
+    — rotation-vector quaternion, gravity-free acceleration and gyroscope rate.
+    """
+    samples = msg.get("samples")
+    if not isinstance(samples, list) or not samples:
+        raise ValueError("samples must be a non-empty list")
+    if len(samples) > MAX_MOTION_SAMPLES:
+        raise ValueError(f"at most {MAX_MOTION_SAMPLES} samples per message")
+    clean = []
+    for sample in samples:
+        if not isinstance(sample, dict) or not _is_finite_number(sample.get("t_ms")):
+            raise ValueError("each sample needs a finite t_ms")
+        item: dict = {"t_ms": float(sample["t_ms"])}
+        for key, (length, bound) in MOTION_BOUNDS.items():
+            values = sample.get(key)
+            if (
+                not isinstance(values, list)
+                or len(values) != length
+                or not all(_is_finite_number(v) and abs(float(v)) <= bound for v in values)
+            ):
+                raise ValueError(f"{key} must be {length} finite numbers within ±{bound}")
+            item[key] = [float(v) for v in values]
+        clean.append(item)
+    return {"type": "motion", "samples": clean}
+
+
 def validate_client_message(msg: dict, *, kind: str, max_frame_bytes: int) -> dict:
     """Dispatch to the per-type validator based on the stream kind."""
     mtype = msg.get("type") if isinstance(msg, dict) else None
     if mtype == "control":
         return validate_control_message(msg)
+    if mtype == "motion" and kind == "video":
+        return validate_motion_message(msg)
     if kind == "landmarks":
         if mtype != "landmarks":
             raise ValueError("this stream only accepts 'landmarks' and 'control' messages")
         return validate_landmarks_message(msg)
     if mtype != "frame":
-        raise ValueError("this stream only accepts 'frame' and 'control' messages")
+        raise ValueError("this stream only accepts 'frame', 'motion' and 'control' messages")
     return validate_frame_message(msg, max_bytes=max_frame_bytes)
 
 

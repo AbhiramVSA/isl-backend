@@ -79,6 +79,19 @@ Video socket — same, but frames:
 {"type": "frame", "t_ms": 1234.0, "jpeg": "<base64>"}
 ```
 
+Phone motion (video socket only) — batches of sensor samples on the **same
+clock as the frames' `t_ms`**, up to 64 per message, ~30 Hz:
+```json
+{"type": "motion", "samples": [
+  {"t_ms": 1240.0, "q": [x, y, z, w], "a": [x, y, z], "g": [x, y, z]}
+]}
+```
+`q` is the rotation-vector quaternion (`TYPE_ROTATION_VECTOR`), `a` gravity-free
+acceleration in m/s² (`TYPE_LINEAR_ACCELERATION`), `g` angular rate in rad/s
+(`TYPE_GYROSCOPE`). Motion is never sent to the recogniser; it is recorded with
+the video, relayed to responders live, and scanned for impacts, sudden movement
+and violent shaking. Out-of-range values get an `error` frame and are dropped.
+
 Control messages (both sockets):
 ```json
 {"type": "control", "action": "reset"}

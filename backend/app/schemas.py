@@ -35,12 +35,23 @@ class TokenPair(BaseModel):
 
 class Identity(BaseModel):
     id: int
+    account_id: int | None = None
     role: Role
+    role_label: str | None = None
+    permissions: list[str] = Field(default_factory=list)
+    global_scope: bool = False
     name: str
     email: EmailStr
     offices: list[str] = Field(default_factory=list)
+    office_ids: list[int] = Field(default_factory=list)
     phone: str | None = None
     created_at: datetime | None = None
+    last_login_at: datetime | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=10, max_length=128)
 
 
 class ReportCreate(BaseModel):
@@ -100,6 +111,18 @@ class ReportOut(ORMModel):
     office: OfficeOut
     assigned_officer: OfficerSummary | None
     transcript_available: bool = False
+    # Written by the Equal app; empty on reports from other sources.
+    reference_code: str | None = None
+    title: str | None = None
+    severity: str | None = None
+    situation_analysis: str | None = None
+    recommended_actions: list[str] | None = None
+    transcript: str | None = None
+    labels: list[str] | None = None
+    duration_ms: int | None = None
+    location_label: str | None = None
+    reporter_name: str | None = None
+    source: str | None = None
 
 
 class PaginatedReports(BaseModel):

@@ -54,6 +54,7 @@ from app.services.mobile_reports import (
 )
 from app.services.realtime import realtime_hub
 from app.services.routing_service import haversine_km, routing_service
+from app.services.stream_media import link_stream
 from app.services.transcription import model_ready, transcribe_video
 
 router = APIRouter(tags=["Equal mobile app"])
@@ -206,6 +207,12 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> Lo
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Those sign-in details weren't accepted.",
+            )
+        if account.status != AccountStatus.ACTIVE:
+            # Blocked from the console's Reporters page.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account has been suspended. Call 112 in an emergency.",
             )
         profile = await db.scalar(select(User).where(User.account_id == account.id))
         if profile is None:
@@ -362,13 +369,14 @@ async def submit_report(
             ),
             AuditLog(
                 actor_type="USER",
-                actor_id=user_id,
+                actor_id=principal.account.id,
                 action="REPORT_CREATED",
                 target_type="REPORT",
                 target_id=report.public_id,
             ),
         ]
     )
+    await link_stream(db, report, payload.stream_id, payload.stream_token)
     await db.commit()
     await db.refresh(report)
 
