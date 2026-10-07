@@ -12,6 +12,7 @@ from. What differs is the dialect — see `app/services/mobile_reports.py`.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -20,6 +21,7 @@ import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.security import create_token, hash_password, verify_password
@@ -41,6 +43,7 @@ from app.schemas_mobile import (
     LoginResponse,
     MobileUser,
     PredictionResponse,
+    RegisterRequest,
     ReportListResponse,
     ReportResponse,
     ReportSubmission,
@@ -157,72 +160,45 @@ async def predict(file: UploadFile = File(...)) -> PredictionResponse:
 # --- accounts ---------------------------------------------------------------
 
 
-@router.post("/api/v1/auth/login", response_model=LoginResponse, summary="Sign in from the app")
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> LoginResponse:
-    """Signs a caller in, creating the account on first use.
+def normalize_identifier(identifier: str) -> str:
+    """One spelling per person, so the same details always reach the same account.
 
-    ⚠️ No ownership check: the first person to sign in with an identifier claims
-    it. Deliberate for a pilot — the app has no registration flow and someone in
-    an emergency should not be stopped at a signup form — but an identifier is
-    therefore not proof of identity. Verify by OTP before real accounts.
-
-    The identifier is stored in `accounts.email` whatever it actually is; the
-    column is a plain string and the app's callers are as likely to sign in with
-    a phone number or a disability-services ID as with an email.
+    Emails are case-insensitive in practice; phone numbers arrive with whatever
+    spacing and punctuation the keyboard offered. Anything else (a
+    disability-services ID) is kept as typed, trimmed.
     """
-    identifier = payload.identifier.strip()
-    if not identifier:
+    value = identifier.strip()
+    if "@" in value:
+        return value.lower()
+    compact = re.sub(r"[\s().-]", "", value)
+    if re.fullmatch(r"\+?\d{6,15}", compact):
+        return compact
+    return value
+
+
+async def _account_for(db: AsyncSession, identifier: str) -> Account | None:
+    """Looks the identifier up normalised, then as typed.
+
+    Accounts made before identifiers were normalised were stored verbatim; the
+    second lookup keeps their owners from finding an empty account.
+    """
+    normalized = normalize_identifier(identifier)
+    account = await db.scalar(select(Account).where(Account.email == normalized))
+    if account is None and normalized != identifier.strip():
+        account = await db.scalar(select(Account).where(Account.email == identifier.strip()))
+    return account
+
+
+def _require_identifier(identifier: str) -> str:
+    if not identifier.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Enter a phone number, email, or ID to continue.",
         )
+    return normalize_identifier(identifier)
 
-    account = await db.scalar(select(Account).where(Account.email == identifier))
 
-    if account is None:
-        account = Account(
-            email=identifier,
-            password_hash=hash_password(payload.passcode or identifier),
-            role=Role.USER,
-            status=AccountStatus.ACTIVE,
-        )
-        db.add(account)
-        await db.flush()
-        profile = User(
-            account_id=account.id,
-            name=display_name_from(identifier),
-            phone=identifier if "@" not in identifier else None,
-        )
-        db.add(profile)
-        await db.flush()
-    else:
-        if account.role != Role.USER:
-            # An officer account signing in through the app would get a token
-            # the console's own endpoints would then honour.
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Those sign-in details weren't accepted.",
-            )
-        if not verify_password(payload.passcode or identifier, account.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Those sign-in details weren't accepted.",
-            )
-        if account.status != AccountStatus.ACTIVE:
-            # Blocked from the console's Reporters page.
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This account has been suspended. Call 112 in an emergency.",
-            )
-        profile = await db.scalar(select(User).where(User.account_id == account.id))
-        if profile is None:
-            profile = User(account_id=account.id, name=display_name_from(identifier))
-            db.add(profile)
-            await db.flush()
-
-    account.last_login_at = datetime.now(UTC)
-    await db.commit()
-
+def _signed_in(account: Account, profile: User, identifier: str) -> LoginResponse:
     # Deliberately long-lived. The console rotates a 15-minute token against a
     # refresh endpoint; the app holds one token and has no refresh flow, and
     # being signed out mid-emergency is not a failure worth designing in.
@@ -239,6 +215,123 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> Lo
     )
 
 
+REJECTED = "Those sign-in details weren't accepted."
+
+
+@router.post(
+    "/api/v1/auth/register",
+    response_model=LoginResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create an account from the app",
+)
+async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> LoginResponse:
+    """Creates a caller's account and signs them in.
+
+    The account is what ties reports to a person rather than to a phone: sign in
+    with the same identifier and passcode anywhere and the same reports come back.
+
+    ⚠️ The identifier is still not verified (no OTP), so it is a username, not
+    proof of identity. The passcode is what protects the account.
+
+    Accounts created before passcodes were required were hashed against the
+    identifier itself; registering on one of those claims it, so its owner keeps
+    their history instead of meeting "already taken".
+    """
+    identifier = _require_identifier(payload.identifier)
+    account = await _account_for(db, payload.identifier)
+
+    if account is not None:
+        legacy = account.role == Role.USER and verify_password(account.email, account.password_hash)
+        if not legacy:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account already exists for those details. Sign in instead.",
+            )
+        if account.status != AccountStatus.ACTIVE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account has been suspended. Call 112 in an emergency.",
+            )
+        account.password_hash = hash_password(payload.passcode)
+        profile = await db.scalar(select(User).where(User.account_id == account.id))
+        if profile is None:
+            profile = User(account_id=account.id, name=display_name_from(account.email))
+            db.add(profile)
+        if payload.display_name.strip():
+            profile.name = payload.display_name.strip()
+        identifier = account.email
+    else:
+        account = Account(
+            email=identifier,
+            password_hash=hash_password(payload.passcode),
+            role=Role.USER,
+            status=AccountStatus.ACTIVE,
+        )
+        db.add(account)
+        await db.flush()
+        profile = User(
+            account_id=account.id,
+            name=payload.display_name.strip() or display_name_from(identifier),
+            phone=identifier if "@" not in identifier else None,
+        )
+        db.add(profile)
+
+    await db.flush()
+    account.last_login_at = datetime.now(UTC)
+    db.add(
+        AuditLog(
+            actor_type="USER",
+            actor_id=account.id,
+            action="APP_ACCOUNT_REGISTERED",
+            target_type="ACCOUNT",
+            target_id=str(account.id),
+        )
+    )
+    await db.commit()
+    return _signed_in(account, profile, identifier)
+
+
+@router.post("/api/v1/auth/login", response_model=LoginResponse, summary="Sign in from the app")
+async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> LoginResponse:
+    """Signs a caller in to an account made with `/auth/register`.
+
+    The same answer for an unknown identifier and a wrong passcode, so this
+    cannot be used to find out who has an account.
+    """
+    _require_identifier(payload.identifier)
+    if not payload.passcode:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Enter your passcode to continue.",
+        )
+
+    account = await _account_for(db, payload.identifier)
+    # An officer account signing in through the app would get a token the
+    # console's own endpoints would then honour, so only USER accounts qualify.
+    if (
+        account is None
+        or account.role != Role.USER
+        or not verify_password(payload.passcode, account.password_hash)
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=REJECTED)
+    if account.status != AccountStatus.ACTIVE:
+        # Blocked from the console's Reporters page.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been suspended. Call 112 in an emergency.",
+        )
+
+    profile = await db.scalar(select(User).where(User.account_id == account.id))
+    if profile is None:
+        profile = User(account_id=account.id, name=display_name_from(account.email))
+        db.add(profile)
+        await db.flush()
+
+    account.last_login_at = datetime.now(UTC)
+    await db.commit()
+    return _signed_in(account, profile, account.email)
+
+
 @router.get("/api/v1/auth/me", response_model=MobileUser, summary="Check a stored token")
 async def me(principal: Principal = Depends(require_user)) -> MobileUser:
     """Lets the app check a stored token is still good before trusting it."""
@@ -252,13 +345,20 @@ async def me(principal: Principal = Depends(require_user)) -> MobileUser:
 # --- reports ----------------------------------------------------------------
 
 
+# Office and officer names ride along on every report the caller reads, and the
+# async session cannot lazy-load them.
+WITH_NAMES = select(Report).options(
+    selectinload(Report.office), selectinload(Report.assigned_officer)
+)
+
+
 async def _find(db: AsyncSession, report_id: str, user_id: int) -> Report:
     """Accepts either the reference code or the `rpt_<id>` the app was handed."""
     report = None
     if report_id.startswith("rpt_") and report_id[4:].isdigit():
-        report = await db.get(Report, int(report_id[4:]))
+        report = await db.scalar(WITH_NAMES.where(Report.id == int(report_id[4:])))
     if report is None:
-        report = await db.scalar(select(Report).where(Report.reference_code == report_id))
+        report = await db.scalar(WITH_NAMES.where(Report.reference_code == report_id))
     # The same answer whether it does not exist or belongs to someone else —
     # otherwise this says which report ids are real.
     if report is None or report.user_id != user_id:
@@ -292,7 +392,7 @@ async def submit_report(
     user_id = principal.user.id  # type: ignore[union-attr]
 
     existing = await db.scalar(
-        select(Report).where(Report.user_id == user_id, Report.client_id == payload.client_id)
+        WITH_NAMES.where(Report.user_id == user_id, Report.client_id == payload.client_id)
     )
     if existing is not None:
         response.status_code = status.HTTP_200_OK
@@ -379,6 +479,7 @@ async def submit_report(
     await link_stream(db, report, payload.stream_id, payload.stream_token)
     await db.commit()
     await db.refresh(report)
+    await db.refresh(report, ["office", "assigned_officer"])
 
     # The console is listening; this is what puts the report on a screen someone
     # is actually watching.
@@ -395,8 +496,7 @@ async def list_reports(
     db: AsyncSession = Depends(get_db),
 ) -> ReportListResponse:
     result = await db.scalars(
-        select(Report)
-        .where(Report.user_id == principal.user.id)  # type: ignore[union-attr]
+        WITH_NAMES.where(Report.user_id == principal.user.id)  # type: ignore[union-attr]
         .order_by(Report.created_at.desc())
         .limit(limit)
     )

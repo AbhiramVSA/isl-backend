@@ -37,9 +37,9 @@ def media_dirs(tmp_path, monkeypatch):
 
 
 async def caller_token(client) -> str:
-    response = await client.post(
-        "/app/api/v1/auth/login", json={"identifier": "caller@test.dev", "passcode": "2468"}
-    )
+    body = {"identifier": "caller@test.dev", "passcode": "2468"}
+    await client.post("/app/api/v1/auth/register", json=body)
+    response = await client.post("/app/api/v1/auth/login", json=body)
     assert response.status_code == 200, response.text
     return response.json()["access_token"]
 

@@ -31,7 +31,8 @@ console's own API is left exactly as it was.
 | `WS` | `/app/api/v1/stream/landmarks` | — | Live landmarks → live glosses (preferred) |
 | `WS` | `/app/api/v1/stream/video` | — | Live JPEG frames → live glosses (fallback) |
 | `GET` | `/app/api/v1/stream/{id}/draft?token=` | — | Transcript saved when a stream closed |
-| `POST` | `/app/api/v1/auth/login` | — | Sign in, creating the account on first use |
+| `POST` | `/app/api/v1/auth/register` | — | Create an account (identifier + passcode) |
+| `POST` | `/app/api/v1/auth/login` | — | Sign in to an existing account |
 | `GET` | `/app/api/v1/auth/me` | ✅ | Check a stored token is still valid |
 | `POST` | `/app/api/v1/reports` | ✅ | **Store a report the app wrote** |
 | `GET` | `/app/api/v1/reports` | ✅ | This caller's reports, newest first |
@@ -95,14 +96,43 @@ report POST. Full wire protocol, budgets, and Android snippets:
 
 ## Sign-in
 
-`POST /app/api/v1/auth/login` takes `{identifier, passcode}`, where the
-identifier is a phone number, an email, or an ID issued by a disability-services
-office. It is stored in `accounts.email`, which is a plain string column.
+`POST /app/api/v1/auth/register` takes `{identifier, passcode, display_name?}`
+and answers 201 with the same body as login. The identifier is a phone number,
+an email, or an ID issued by a disability-services office, stored in
+`accounts.email` (a plain string column). The passcode is at least 4
+characters. 409 if the identifier already has an account.
 
-> ⚠️ **No ownership check.** The first person to sign in with a given identifier
-> claims it. That is deliberate for a pilot — the app has no registration flow
-> and someone in an emergency should not be stopped at a signup form — but an
-> identifier is not proof of identity. Add OTP verification before real accounts.
+`POST /app/api/v1/auth/login` takes `{identifier, passcode}` and no longer
+creates accounts: an unknown identifier and a wrong passcode both answer 401
+with the same message. Reports belong to the account, so signing in with the
+same details on any device returns the same history.
+
+Identifiers are normalised before lookup — emails lower-cased, phone numbers
+stripped of spaces, dashes and brackets — so `+91 98765-43210` and
+`+919876543210` reach the same account.
+
+Accounts created by the old auto-create sign-in with no passcode were hashed
+against the identifier itself. Registering on one of those sets the passcode
+and keeps the history rather than answering 409.
+
+> ⚠️ **Identifiers are still not verified.** There is no OTP, so an identifier
+> is a username, not proof of identity; the passcode is what protects the
+> account. Add OTP verification before real accounts.
+
+### Report progress
+
+Every report the app reads carries, in addition to the five-value `status`:
+
+| Field | Meaning |
+| --- | --- |
+| `status_detail` | The console's own status (`NEW` … `ARRIVED`, `RESOLVED`, `CANCELLED`) |
+| `timeline` | `[{step, label, at}]`, one entry per transition reached, oldest first |
+| `office_name` | The office the report was routed to |
+| `officer_name` | The assigned officer, once there is one |
+| `updated_at` | Last change to the report |
+
+The timeline is built from the timestamps the console stamps on each
+transition, so it needs no extra query.
 
 Tokens here last `MOBILE_ACCESS_TOKEN_DAYS` (30 by default), not the console's
 15 minutes: the app holds a single token and has no refresh flow, and being

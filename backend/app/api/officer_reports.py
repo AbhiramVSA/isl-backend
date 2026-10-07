@@ -32,6 +32,7 @@ from app.schemas import (
     ReportVideoOut,
 )
 from app.services.realtime import realtime_hub
+from app.services.recordings import recording_file
 from app.services.reports import (
     REPORT_LOAD,
     get_report,
@@ -233,8 +234,8 @@ async def report_videos(
     videos: list[ReportVideoOut] = []
     session = await db.scalar(select(StreamSession).where(StreamSession.report_id == report.id))
     if session and session.recording_key:
-        recording = settings.recording_dir / session.recording_key
-        if recording.is_file():
+        recording = await recording_file(session.recording_key)
+        if recording is not None:
             videos.append(
                 ReportVideoOut(
                     id="live-recording",
@@ -283,7 +284,7 @@ async def play_report_video(
     if video_id == "live-recording":
         session = await db.scalar(select(StreamSession).where(StreamSession.report_id == report.id))
         if session and session.recording_key:
-            path = settings.recording_dir / session.recording_key
+            path = await recording_file(session.recording_key)
     elif video_id.startswith("upload-"):
         try:
             media_id = int(video_id.removeprefix("upload-"))

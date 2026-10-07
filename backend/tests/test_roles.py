@@ -285,8 +285,8 @@ async def test_offices_can_be_edited_but_not_all_deactivated(client, db):
 async def test_blocked_reporter_cannot_sign_in_to_the_app(client, db):
     await roster(db)
     login_body = {"identifier": "caller@test.dev", "passcode": "1234"}
-    first = await client.post("/app/api/v1/auth/login", json=login_body)
-    assert first.status_code == 200
+    first = await client.post("/app/api/v1/auth/register", json=login_body)
+    assert first.status_code == 201
     admin = auth(await login(client, "admin"))
     reporters = (await client.get("/api/v1/admin/reporters", headers=admin)).json()
     caller = next(item for item in reporters["items"] if item["email"] == "caller@test.dev")

@@ -12,6 +12,7 @@ from app.dependencies import Principal, current_principal, require_officer, requ
 from app.models import AuditLog, ReportHistory, StreamSession
 from app.schemas import StreamState
 from app.services.realtime import realtime_hub
+from app.services.recordings import recording_file, s3_enabled
 from app.services.reports import get_report
 
 router = APIRouter(tags=["Live video"])
@@ -53,6 +54,24 @@ def livekit_token(room: str, identity: str, can_publish: bool) -> str:
         raise HTTPException(status_code=503, detail="Live video is currently unavailable") from exc
 
 
+def recording_output(api, filename: str):
+    if not s3_enabled():
+        # Egress shares /out with the API's recording_dir (docker-compose).
+        return api.EncodedFileOutput(file_type=api.EncodedFileType.MP4, filepath=f"/out/{filename}")
+    return api.EncodedFileOutput(
+        file_type=api.EncodedFileType.MP4,
+        filepath=filename,
+        s3=api.S3Upload(
+            access_key=settings.recording_s3_access_key_id,
+            secret=settings.recording_s3_secret_access_key,
+            region=settings.recording_s3_region,
+            endpoint=settings.recording_s3_endpoint,
+            bucket=settings.recording_s3_bucket,
+            force_path_style=True,
+        ),
+    )
+
+
 async def start_recording(session: StreamSession, public_id: str) -> bool:
     """Start server-side MP4 recording when the development egress worker is available."""
     if settings.environment == "test":
@@ -62,7 +81,7 @@ async def start_recording(session: StreamSession, public_id: str) -> bool:
 
         filename = f"{public_id}-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.mp4"
         client = api.LiveKitAPI(
-            settings.livekit_url.replace("ws://", "http://").replace("wss://", "https://"),
+            settings.livekit_server_url,
             settings.livekit_api_key,
             settings.livekit_api_secret,
         )
@@ -74,12 +93,7 @@ async def start_recording(session: StreamSession, public_id: str) -> bool:
                     api.RoomCompositeEgressRequest(
                         room_name=session.room_name,
                         layout="speaker-dark",
-                        file_outputs=[
-                            api.EncodedFileOutput(
-                                file_type=api.EncodedFileType.MP4,
-                                filepath=f"/out/{filename}",
-                            )
-                        ],
+                        file_outputs=[recording_output(api, filename)],
                     )
                 ),
                 timeout=8,
@@ -101,7 +115,7 @@ async def stop_recording(session: StreamSession) -> None:
         from livekit import api
 
         client = api.LiveKitAPI(
-            settings.livekit_url.replace("ws://", "http://").replace("wss://", "https://"),
+            settings.livekit_server_url,
             settings.livekit_api_key,
             settings.livekit_api_secret,
         )
@@ -237,7 +251,7 @@ async def stop_video(
         report.office_id, {"type": "stream.stopped", "report_id": public_id}
     )
     recording_available = bool(
-        session.recording_key and (settings.recording_dir / session.recording_key).is_file()
+        await recording_file(session.recording_key) is not None
     )
     return StreamState(
         available=True,
@@ -279,7 +293,7 @@ async def get_stream(
         requested=bool(session.requested_at),
         recording=bool(session.active and session.egress_id),
         recording_available=bool(
-            session.recording_key and (settings.recording_dir / session.recording_key).is_file()
+            await recording_file(session.recording_key) is not None
         ),
         viewer_url=settings.livekit_url if session.active else None,
         access_token=token,
@@ -300,7 +314,7 @@ async def get_recording(
     session = await db.scalar(select(StreamSession).where(StreamSession.report_id == report.id))
     if not session or not session.recording_key:
         raise HTTPException(status_code=404, detail="A saved video is not available yet")
-    recording = settings.recording_dir / session.recording_key
-    if not recording.is_file():
+    recording = await recording_file(session.recording_key)
+    if recording is None:
         raise HTTPException(status_code=404, detail="The video is still being prepared")
     return FileResponse(recording, media_type="video/mp4", filename=recording.name)

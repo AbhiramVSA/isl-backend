@@ -5,13 +5,16 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv
 COPY pyproject.toml uv.lock ./
 COPY app ./app
-RUN --mount=type=cache,target=/root/.cache/uv \
+RUN --mount=type=cache,id=s/0ac2492c-a468-4f94-9ab2-ac2f86a54298-/root/.cache/uv,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
 FROM python:3.12-slim-bookworm
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
+# ffmpeg: live_relay stitches streamed frames into the saved MP4
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system app \
     && useradd --system --gid app app \
     && mkdir -p /data/uploads /data/recordings \

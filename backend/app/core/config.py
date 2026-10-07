@@ -18,9 +18,20 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("uploads")
     max_upload_bytes: int = 25 * 1024 * 1024
     livekit_url: str = "ws://localhost:7880"
+    # Server-side LiveKit API address, e.g. a private-network URL; defaults to
+    # livekit_url (which is also handed to clients, so must stay public).
+    livekit_api_url: str = ""
     livekit_api_key: str = "devkey"
     livekit_api_secret: str = "secret"
     recording_dir: Path = Path("recordings")
+    # When egress cannot share a disk with the API (e.g. separate Railway
+    # services), it uploads recordings here and the API pulls them into
+    # recording_dir on first use. Unset keeps the shared-volume behaviour.
+    recording_s3_bucket: str = ""
+    recording_s3_endpoint: str = ""
+    recording_s3_region: str = "auto"
+    recording_s3_access_key_id: str = ""
+    recording_s3_secret_access_key: str = ""
     development_global_officer_queue: bool = True
 
     # Recognition backend points at the isl-recognition-safety service.
@@ -69,6 +80,11 @@ class Settings(BaseSettings):
     allowed_media_types: set[str] = Field(
         default={"image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"}
     )
+
+    @property
+    def livekit_server_url(self) -> str:
+        url = self.livekit_api_url or self.livekit_url
+        return url.replace("ws://", "http://").replace("wss://", "https://")
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -29,6 +29,9 @@ CATEGORIES = {
 }
 SEVERITIES = {"Critical", "High", "Moderate", "Low"}
 
+# Short enough to type on a phone keypad, long enough not to be guessed outright.
+MIN_PASSCODE_LENGTH = 4
+
 
 class HealthResponse(BaseModel):
     """The app's pre-flight check.
@@ -53,6 +56,14 @@ class LoginRequest(BaseModel):
 
     identifier: str = Field(min_length=1, max_length=160)
     passcode: str = Field(default="", max_length=200)
+
+
+class RegisterRequest(BaseModel):
+    """Creates the account a caller signs in with on any device afterwards."""
+
+    identifier: str = Field(min_length=1, max_length=160)
+    passcode: str = Field(min_length=MIN_PASSCODE_LENGTH, max_length=200)
+    display_name: str = Field(default="", max_length=120)
 
 
 class MobileUser(BaseModel):
@@ -128,6 +139,19 @@ class ReportSubmission(BaseModel):
         return [item.strip()[:400] for item in value if item.strip()]
 
 
+class ReportTimelineEntry(BaseModel):
+    """One step of a report's progress, in the console's own vocabulary.
+
+    `step` is the console status that was reached (`ACKNOWLEDGED`, `RESPONDING`,
+    ...), finer-grained than `status`, so the app can show "officer on scene"
+    separately from "unit on the way".
+    """
+
+    step: str
+    label: str
+    at: datetime
+
+
 class ReportResponse(BaseModel):
     """The canonical stored record. The app replaces its local copy with this."""
 
@@ -150,6 +174,12 @@ class ReportResponse(BaseModel):
     reporter_name: str
     source: str
     generated_by: str
+    # Progress detail. All additive: older builds of the app ignore them.
+    status_detail: str = "NEW"
+    updated_at: datetime | None = None
+    office_name: str | None = None
+    officer_name: str | None = None
+    timeline: list[ReportTimelineEntry] = Field(default_factory=list)
 
 
 class ReportListResponse(BaseModel):

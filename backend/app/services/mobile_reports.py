@@ -11,8 +11,10 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import inspect
+
 from app.models import Priority, Report, ReportStatus
-from app.schemas_mobile import ReportResponse
+from app.schemas_mobile import ReportResponse, ReportTimelineEntry
 
 # --- urgency ----------------------------------------------------------------
 # Four values into three. Moderate and Low both land on NORMAL: the console
@@ -68,8 +70,53 @@ def app_report_id(report: Report) -> str:
     return f"rpt_{report.id}"
 
 
+# --- timeline ---------------------------------------------------------------
+# Built from the timestamps the console stamps on each transition rather than
+# from report_history, so it costs no extra query and reads the same whichever
+# console screen moved the report along.
+TIMELINE_STEPS = (
+    ("ACKNOWLEDGED", "acknowledged_at", "A responder has read your report"),
+    ("RESPONDING", "responding_at", "A unit is on the way"),
+    ("ARRIVED", "arrived_at", "Responders have arrived"),
+)
+
+
+def build_timeline(report: Report) -> list[ReportTimelineEntry]:
+    entries = [ReportTimelineEntry(step="NEW", label="Report received", at=utc(report.created_at))]
+    for step, attribute, label in TIMELINE_STEPS:
+        reached = getattr(report, attribute)
+        if reached is not None:
+            entries.append(ReportTimelineEntry(step=step, label=label, at=utc(reached)))
+    if report.status in (ReportStatus.RESOLVED, ReportStatus.CANCELLED):
+        closed_at = report.resolved_at or report.updated_at or report.created_at
+        entries.append(
+            ReportTimelineEntry(
+                step=report.status.value,
+                label="Resolved"
+                if report.status == ReportStatus.RESOLVED
+                else "Closed by responders",
+                at=utc(closed_at),
+            )
+        )
+    return sorted(entries, key=lambda entry: entry.at)
+
+
+def _loaded(report: Report, relationship: str):
+    """A relationship's value if it was loaded, else None.
+
+    The session is async, so touching an unloaded relationship would raise
+    rather than lazy-load. Callers that want names eager-load them.
+    """
+    state = inspect(report)
+    if relationship in state.unloaded:
+        return None
+    return getattr(report, relationship)
+
+
 def to_app_report(report: Report) -> ReportResponse:
     created = report.created_at
+    office = _loaded(report, "office")
+    officer = _loaded(report, "assigned_officer")
     return ReportResponse(
         id=app_report_id(report),
         reference_code=report.reference_code or app_report_id(report),
@@ -90,6 +137,11 @@ def to_app_report(report: Report) -> ReportResponse:
         reporter_name=report.reporter_name or "",
         source=report.source or "sign_video",
         generated_by=report.generated_by or "",
+        status_detail=report.status.value,
+        updated_at=utc(report.updated_at) if report.updated_at else None,
+        office_name=office.name if office else None,
+        officer_name=officer.name if officer else None,
+        timeline=build_timeline(report),
     )
 
 

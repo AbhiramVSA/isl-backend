@@ -16,6 +16,7 @@ from app.db import get_db
 from app.dependencies import Principal, require_officer, require_user
 from app.models import ReportHistory, StreamSession
 from app.services.realtime import realtime_hub
+from app.services.recordings import recording_file
 from app.services.reports import get_report
 from app.services.transcription import transcribe_video
 
@@ -99,8 +100,8 @@ async def transcribe_saved_video(
         )
     if session.active:
         raise HTTPException(status_code=409, detail="End the video before starting transcription.")
-    recording = settings.recording_dir / session.recording_key
-    if not recording.is_file():
+    recording = await recording_file(session.recording_key)
+    if recording is None:
         raise HTTPException(
             status_code=409,
             detail="The saved video is still being prepared. Try again in a moment.",
