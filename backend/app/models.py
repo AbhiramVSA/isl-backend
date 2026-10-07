@@ -101,6 +101,7 @@ class Office(Base):
     longitude: Mapped[float] = mapped_column(Float)
     service_radius: Mapped[float] = mapped_column(Float, default=10.0)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    google_place_id: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -137,6 +138,10 @@ class Report(Base):
     initial_latitude: Mapped[float] = mapped_column(Float)
     initial_longitude: Mapped[float] = mapped_column(Float)
     location_accuracy: Mapped[float | None] = mapped_column(Float)
+    formatted_address: Mapped[str | None] = mapped_column(String(500))
+    plus_code: Mapped[str | None] = mapped_column(String(32))
+    eta_seconds: Mapped[int | None] = mapped_column(Integer)
+    route_source: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     responding_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

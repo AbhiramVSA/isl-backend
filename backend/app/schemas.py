@@ -102,6 +102,10 @@ class ReportOut(ORMModel):
     initial_latitude: float
     initial_longitude: float
     location_accuracy: float | None
+    formatted_address: str | None = None
+    plus_code: str | None = None
+    eta_seconds: int | None = None
+    route_source: str | None = None
     created_at: datetime
     updated_at: datetime
     acknowledged_at: datetime | None
