@@ -428,6 +428,8 @@ async def submit_report(
         priority=PRIORITY_BY_SEVERITY[payload.severity],
         initial_latitude=latitude,
         initial_longitude=longitude,
+        eta_seconds=route.eta_seconds,
+        route_source=route.route_source,
         created_at=created_at if created_at.tzinfo else created_at.replace(tzinfo=UTC),
         reference_code=new_reference_code(),
         client_id=payload.client_id,
@@ -465,6 +467,9 @@ async def submit_report(
                 event_metadata={
                     "distance_km": round(route.distance_km, 3),
                     "matched_service_area": route.matched_service_area,
+                    "eta_seconds": route.eta_seconds,
+                    "route_source": route.route_source,
+                    "haversine_office_id": route.haversine_office_id,
                 },
             ),
             AuditLog(

@@ -88,6 +88,8 @@ async def create_report(
         initial_latitude=data.latitude,
         initial_longitude=data.longitude,
         location_accuracy=data.location_accuracy,
+        eta_seconds=route.eta_seconds,
+        route_source=route.route_source,
     )
     db.add(report)
     await db.flush()
@@ -102,6 +104,9 @@ async def create_report(
                 metadata={
                     "distance_km": round(route.distance_km, 3),
                     "matched_service_area": route.matched_service_area,
+                    "eta_seconds": route.eta_seconds,
+                    "route_source": route.route_source,
+                    "haversine_office_id": route.haversine_office_id,
                 },
             ),
             AuditLog(

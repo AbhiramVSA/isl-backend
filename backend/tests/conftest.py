@@ -3,6 +3,7 @@ import os
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_incident.db"
 os.environ["SECRET_KEY"] = "test-secret-key-with-sufficient-length"
+os.environ["GOOGLE_MAPS_SERVER_KEY"] = ""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
