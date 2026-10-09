@@ -154,6 +154,17 @@ class LocationOut(ORMModel):
     recorded_at: datetime
 
 
+class RouteOut(BaseModel):
+    origin_latitude: float
+    origin_longitude: float
+    destination_latitude: float
+    destination_longitude: float
+    accuracy: float | None
+    duration_seconds: int
+    distance_meters: int
+    encoded_polyline: str
+
+
 class HistoryOut(ORMModel):
     event: str
     old_status: str | None

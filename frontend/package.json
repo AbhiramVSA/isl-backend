@@ -14,6 +14,7 @@
     "@sveltejs/adapter-node": "^5.5.7",
     "@sveltejs/kit": "^2.27.0",
     "@sveltejs/vite-plugin-svelte": "^6.0.0",
+    "@types/google.maps": "^3.66.10",
     "@types/three": "^0.180.0",
     "svelte": "^5.35.0",
     "svelte-check": "^4.2.0",

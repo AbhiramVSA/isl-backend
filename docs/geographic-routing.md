@@ -15,3 +15,16 @@ Report creation never depends on Google. A missing key, a timeout (1.5 s with on
 Initial coordinates are immutable. Later movement is appended to `report_locations`; it never changes routing history. Latitude and longitude are validated at the API boundary.
 
 Service-radius circles are an intentional prototype approximation. The PostGIS replacement should store real jurisdiction polygons, use `ST_Covers`, then fall back to nearest-office distance.
+
+## Officer route map
+
+The officer report page draws the driving route from the assigned office to the latest point in `report_locations` (or the initial point) with the Maps JavaScript API, and shows the current ETA and the reported accuracy radius. The route comes from `GET /api/v1/officer/reports/{public_id}/route`, which calls Routes `computeRoutes` with the server key. The page refreshes it when the reporter moves, at most every 30 seconds, and otherwise every minute while open.
+
+The console loads Maps JS only when `PUBLIC_GOOGLE_MAPS_BROWSER_KEY` is set. Without it, or if the script fails to load, the page falls back to the MapLibre/OpenStreetMap map. The live map page and the mobile app stay on MapLibre.
+
+## Keys
+
+- `GOOGLE_MAPS_SERVER_KEY` (backend): restrict it by server IP and to the Routes, Geocoding and Places (New) APIs. It never reaches a client.
+- `PUBLIC_GOOGLE_MAPS_BROWSER_KEY` (console): restrict it by HTTP referrer to the console domain and to the Maps JavaScript API only.
+
+Set per-API daily quotas and a billing budget alert on the Google Cloud project.

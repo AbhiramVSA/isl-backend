@@ -19,6 +19,7 @@ export interface LiveStream {
   reporter_name: string | null; caption: string; transcript: string; safety: string; report_id: string | null; recording_ready: boolean;
 }
 export interface ReportsPage { items: Report[]; page: number; page_size: number; total: number }
+export interface RouteInfo { origin_latitude: number; origin_longitude: number; destination_latitude: number; destination_longitude: number; accuracy: number | null; duration_seconds: number; distance_meters: number; encoded_polyline: string }
 export interface Location { latitude: number; longitude: number; accuracy: number | null; speed: number | null; heading: number | null; recorded_at: string }
 export interface History { event: string; old_status: string | null; new_status: string | null; event_metadata: Record<string, unknown>; created_at: string }
 export interface Related { nearby: (Report & { distance_km: number })[]; same_user: Report[]; same_office: Report[] }

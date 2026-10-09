@@ -7,7 +7,7 @@
   import { toast } from '$lib/toast.svelte';
   import { localDate, localDateTime, localTime, parseApiTime, relativeTime } from '$lib/time';
   import { categoryLabel, priorityLabel, statusLabel, type History, type LiveStream, type Location, type Related, type Report, type ReportStatus } from '$lib/types';
-  import ReportMap from '$lib/components/ReportMap.svelte';
+  import GoogleRouteMap from '$lib/components/GoogleRouteMap.svelte';
   import LiveVideo from '$lib/components/LiveVideo.svelte';
   import LiveSignPlayer from '$lib/components/LiveSignPlayer.svelte';
   import SignVideoPlayer from '$lib/components/SignVideoPlayer.svelte';
@@ -291,7 +291,7 @@
     <aside class="side">
       <section class="panel map-card">
         <header><h2>{stale ? 'Last known location' : 'Location'}</h2>{#if stale}<span class="pill warn">Not updated recently</span>{:else if location}<span class="pill ok">Live</span>{/if}</header>
-        <div class="map-wrap"><ReportMap {report} {location} /></div>
+        <div class="map-wrap"><GoogleRouteMap {report} {location} /></div>
         <p class="muted small">{report.formatted_address ?? report.location_label ?? `${report.initial_latitude.toFixed(5)}, ${report.initial_longitude.toFixed(5)}`}{report.plus_code ? ` · ${report.plus_code}` : ''}{location ? ` · updated ${relativeTime(location.recorded_at)}` : ''}</p>
       </section>
 

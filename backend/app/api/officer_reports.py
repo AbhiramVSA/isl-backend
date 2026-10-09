@@ -30,7 +30,9 @@ from app.schemas import (
     ReporterDetails,
     ReportOut,
     ReportVideoOut,
+    RouteOut,
 )
+from app.services.google_maps import GoogleMapsError, LatLng, google_maps
 from app.services.realtime import realtime_hub
 from app.services.recordings import recording_file
 from app.services.reports import (
@@ -47,6 +49,15 @@ router = APIRouter(prefix="/officer", tags=["Officer reports"])
 def authorize(report: Report, principal: Principal) -> None:
     if not principal.can_access_office(report.office_id):
         raise HTTPException(status_code=403, detail="You do not have access to this report")
+
+
+async def latest_location_of(db: AsyncSession, report_id: int) -> ReportLocation | None:
+    return await db.scalar(
+        select(ReportLocation)
+        .where(ReportLocation.report_id == report_id)
+        .order_by(ReportLocation.recorded_at.desc())
+        .limit(1)
+    )
 
 
 @router.get(
@@ -191,11 +202,46 @@ async def latest_location(
 ) -> ReportLocation | None:
     report = await get_report(db, public_id)
     authorize(report, principal)
-    return await db.scalar(
-        select(ReportLocation)
-        .where(ReportLocation.report_id == report.id)
-        .order_by(ReportLocation.recorded_at.desc())
-        .limit(1)
+    return await latest_location_of(db, report.id)
+
+
+@router.get(
+    "/reports/{public_id}/route",
+    response_model=RouteOut,
+    summary="Get the driving route from the assigned office to the latest location",
+)
+async def route(
+    public_id: str,
+    principal: Principal = Depends(require_officer),
+    db: AsyncSession = Depends(get_db),
+) -> RouteOut:
+    report = await get_report(db, public_id)
+    authorize(report, principal)
+    if not google_maps.enabled:
+        raise HTTPException(status_code=503, detail="Google Maps is not configured")
+    latest = await latest_location_of(db, report.id)
+    if latest:
+        destination = LatLng(latest.latitude, latest.longitude)
+        accuracy = latest.accuracy
+    else:
+        destination = LatLng(report.initial_latitude, report.initial_longitude)
+        accuracy = report.location_accuracy
+    origin = LatLng(report.office.latitude, report.office.longitude)
+    try:
+        summary = await google_maps.compute_route(origin, destination)
+    except GoogleMapsError as exc:
+        raise HTTPException(status_code=502, detail="The route is unavailable") from exc
+    if summary is None:
+        raise HTTPException(status_code=404, detail="No driving route was found")
+    return RouteOut(
+        origin_latitude=origin.latitude,
+        origin_longitude=origin.longitude,
+        destination_latitude=destination.latitude,
+        destination_longitude=destination.longitude,
+        accuracy=accuracy,
+        duration_seconds=summary.duration_seconds,
+        distance_meters=summary.distance_meters,
+        encoded_polyline=summary.encoded_polyline,
     )
 
 
