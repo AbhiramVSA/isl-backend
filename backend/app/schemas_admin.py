@@ -101,6 +101,7 @@ class OfficeAdminOut(ORMModel):
     longitude: float
     service_radius: float
     active: bool
+    google_place_id: str | None = None
     created_at: datetime
     staff_count: int = 0
     open_reports: int = 0
@@ -113,6 +114,17 @@ class OfficeCreate(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     service_radius: float = Field(default=10, gt=0, le=1000)
+    google_place_id: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class NearbyStation(BaseModel):
+    place_id: str
+    name: str
+    address: str | None
+    latitude: float
+    longitude: float
+    distance_km: float
+    office_id: int | None = None
 
 
 class OfficeUpdate(BaseModel):

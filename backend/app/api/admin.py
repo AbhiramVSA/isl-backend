@@ -35,6 +35,7 @@ from app.models import (
 )
 from app.schemas_admin import (
     AccountStatusUpdate,
+    NearbyStation,
     OfficeAdminOut,
     OfficeCreate,
     OfficeRef,
@@ -47,6 +48,8 @@ from app.schemas_admin import (
     StaffOut,
     StaffUpdate,
 )
+from app.services.google_maps import GoogleMapsError, LatLng, google_maps
+from app.services.routing_service import haversine_km
 
 router = APIRouter(prefix="/admin", tags=["Administration"])
 
@@ -561,6 +564,10 @@ async def create_office(
 ) -> OfficeAdminOut:
     if await db.scalar(select(Office.id).where(func.lower(Office.name) == data.name.lower())):
         raise HTTPException(status_code=409, detail="An office with this name already exists")
+    if data.google_place_id and await db.scalar(
+        select(Office.id).where(Office.google_place_id == data.google_place_id)
+    ):
+        raise HTTPException(status_code=409, detail="This station has already been added")
     office = Office(**data.model_dump())
     db.add(office)
     await db.flush()
@@ -568,6 +575,52 @@ async def create_office(
     await db.commit()
     await db.refresh(office)
     return (await office_outputs(db, [office]))[0]
+
+
+@router.get(
+    "/offices/nearby-stations",
+    response_model=list[NearbyStation],
+    summary="Find police stations near a point to pre-fill new offices",
+)
+async def nearby_stations(
+    latitude: float = Query(ge=-90, le=90),
+    longitude: float = Query(ge=-180, le=180),
+    radius_km: float = Query(5, gt=0, le=50),
+    principal: Principal = Depends(require_permission(Permission.OFFICES_MANAGE)),
+    db: AsyncSession = Depends(get_db),
+) -> list[NearbyStation]:
+    if not google_maps.enabled:
+        raise HTTPException(status_code=503, detail="Google Maps is not configured")
+    try:
+        places = await google_maps.nearby_police_stations(
+            LatLng(latitude, longitude), radius_km * 1000
+        )
+    except GoogleMapsError as exc:
+        raise HTTPException(status_code=502, detail="Nearby stations are unavailable") from exc
+    known = dict(
+        (
+            await db.execute(
+                select(Office.google_place_id, Office.id).where(
+                    Office.google_place_id.in_([place.place_id for place in places])
+                )
+            )
+        ).all()
+    )
+    stations = [
+        NearbyStation(
+            place_id=place.place_id,
+            name=place.name,
+            address=place.address,
+            latitude=place.latitude,
+            longitude=place.longitude,
+            distance_km=round(
+                haversine_km(latitude, longitude, place.latitude, place.longitude), 2
+            ),
+            office_id=known.get(place.place_id),
+        )
+        for place in places
+    ]
+    return sorted(stations, key=lambda station: station.distance_km)
 
 
 @router.patch("/offices/{office_id}", response_model=OfficeAdminOut, summary="Edit an office")
