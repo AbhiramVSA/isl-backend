@@ -1,4 +1,18 @@
-# ISL Recognition API
+<p align="center">
+  <img src="assets/isl-recognition-logo.png" alt="Indian Sign Language video frame with a hand and three classifier tiles" width="200">
+</p>
+
+<h1 align="center">ISL Recognition API</h1>
+
+<p align="center">A FastAPI service for classifying short video clips into three Indian Sign Language words.</p>
+
+<div align="center">
+
+[Overview](#overview) · [Setup](#setup) · [Run](#run) · [Docker](#deploy-with-docker) · [Notes](#notes) · [Limitations](#not-wired-up-yet-on-purpose)
+
+</div>
+
+## Overview
 
 FastAPI backend serving the word-level Indian Sign Language recognizer from
 [Sooryak12/Indian-Sign-Language-Recognition](https://github.com/Sooryak12/Indian-Sign-Language-Recognition).
@@ -150,3 +164,7 @@ Once the domain exists, restrict CORS to the frontend origin (default is `*`):
   `app/models/__init__.py`, and call `Base.metadata.create_all(engine)` (or add Alembic) when
   you need persistence.
 - Celery / Redis / psycopg2 are stubbed as commented lines in `requirements.txt` and `.env.example`.
+
+## License
+
+The repository does not include a root `LICENSE` file.

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">ISL Recognition API mark</title>
+  <desc id="desc">A video frame with three motion signals for sign recognition.</desc>
+  <rect x="12" y="16" width="104" height="96" rx="20" fill="#20294e"/>
+  <rect x="24" y="28" width="80" height="72" rx="12" fill="#f7f4ee"/>
+  <path d="M43 75c8-6 12-15 13-28 0-4 6-4 6 0v12l6-17c2-5 8-3 7 2l-3 17 6-12c3-5 9-2 7 3l-6 15 5-6c4-4 9 0 6 5-8 14-16 22-28 22H49Z" fill="#3da794"/>
+  <path d="M35 87h58" stroke="#e18d54" stroke-linecap="round" stroke-width="5"/>
+</svg>
