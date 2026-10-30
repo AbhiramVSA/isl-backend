@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/isl-recognition-mark.svg" alt="Video frame with sign-recognition signal marks" width="96">
+  <img src="assets/isl-recognition-logo.png" alt="Indian Sign Language video frame with a hand and three classifier tiles" width="200">
 </p>
 
 <h1 align="center">ISL Recognition API</h1>
