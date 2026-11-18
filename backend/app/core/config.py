@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nim_default_model: str = "meta/muse-glimmer-30b"
     nim_timeout_seconds: float = 120.0
+    google_maps_server_key: str = ""
+    google_maps_timeout_seconds: float = 1.5
+    google_maps_retries: int = 1
     auth_requests_per_minute: int = 30
     read_requests_per_minute: int = 1200
     write_requests_per_minute: int = 240
