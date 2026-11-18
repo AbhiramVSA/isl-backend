@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     google_maps_server_key: str = ""
     google_maps_timeout_seconds: float = 1.5
     google_maps_retries: int = 1
+    routing_shortlist_size: int = 5
     auth_requests_per_minute: int = 30
     read_requests_per_minute: int = 1200
     write_requests_per_minute: int = 240
