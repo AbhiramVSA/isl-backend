@@ -43,7 +43,8 @@ export interface Staff {
   id: number; account_id: number; name: string; email: string; phone: string | null; badge_number: string; rank: string | null;
   role: Role; role_label: string; status: AccountStatus; offices: OfficeRef[]; open_reports: number; created_at: string; last_login_at: string | null;
 }
-export interface AdminOffice extends Office { active: boolean; created_at: string; staff_count: number; open_reports: number; total_reports: number }
+export interface AdminOffice extends Office { active: boolean; google_place_id?: string | null; created_at: string; staff_count: number; open_reports: number; total_reports: number }
+export interface NearbyStation { place_id: string; name: string; address: string | null; latitude: number; longitude: number; distance_km: number; office_id: number | null }
 export interface Reporter { id: number; account_id: number; name: string; email: string; phone: string | null; status: AccountStatus; created_at: string; last_login_at: string | null; total_reports: number; open_reports: number }
 export type AdminReport = Report;
 export interface AuditEntry { id: number; created_at: string; action: string; actor_type: string; actor_id: number | null; actor_name: string | null; actor_email: string | null; target_type: string; target_id: string | null; ip_address: string | null; metadata: Record<string, unknown> }

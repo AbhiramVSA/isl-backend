@@ -6,7 +6,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import RequirePermission from '$lib/components/RequirePermission.svelte';
-  import type { AdminOffice } from '$lib/types';
+  import type { AdminOffice, NearbyStation } from '$lib/types';
 
   let offices = $state<AdminOffice[]>([]);
   let loading = $state(true);
@@ -32,7 +32,21 @@
   let form = $state<Form>({ name: '', address: '', latitude: null, longitude: null, service_radius: 10 });
   const mapLink = $derived(form.latitude !== null && form.longitude !== null ? `https://www.openstreetmap.org/?mlat=${form.latitude}&mlon=${form.longitude}#map=14/${form.latitude}/${form.longitude}` : '');
 
-  function openCreate() { editing = null; form = { name: '', address: '', latitude: null, longitude: null, service_radius: 10 }; formError = ''; formOpen = true; }
+  let placeId = $state<string | null>(null); let stations = $state<NearbyStation[]>([]); let searching = $state(false);
+  function openCreate() { editing = null; form = { name: '', address: '', latitude: null, longitude: null, service_radius: 10 }; placeId = null; stations = []; formError = ''; formOpen = true; }
+  async function findStations() {
+    if (form.latitude === null || form.longitude === null) { toast.error('Set a location first, or use your current location.'); return; }
+    searching = true;
+    try {
+      stations = await api<NearbyStation[]>(`/admin/offices/nearby-stations?latitude=${form.latitude}&longitude=${form.longitude}&radius_km=5`);
+      if (!stations.length) toast.error('No police stations found within 5 km.');
+    } catch (e) { toast.error(errorMessage(e, 'Nearby stations are unavailable.')); }
+    finally { searching = false; }
+  }
+  function useStation(station: NearbyStation) {
+    form = { ...form, name: station.name, address: station.address ?? station.name, latitude: station.latitude, longitude: station.longitude };
+    placeId = station.place_id; stations = [];
+  }
   function openEdit(office: AdminOffice) { editing = office; form = { name: office.name, address: office.address, latitude: office.latitude, longitude: office.longitude, service_radius: office.service_radius }; formError = ''; formOpen = true; }
   function useMyLocation() {
     if (!navigator.geolocation) { toast.error('Location is not available on this device.'); return; }
@@ -50,7 +64,7 @@
         await api(`/admin/offices/${editing.id}`, { method: 'PATCH', body: JSON.stringify(form) });
         toast.success(`${form.name} updated.`);
       } else {
-        await api('/admin/offices', { method: 'POST', body: JSON.stringify(form) });
+        await api('/admin/offices', { method: 'POST', body: JSON.stringify({ ...form, google_place_id: placeId }) });
         toast.success(`${form.name} created. New reports nearby will be routed to it.`);
       }
       formOpen = false; await load();
@@ -120,8 +134,19 @@
     <label class="field">Longitude<input type="number" step="any" min="-180" max="180" bind:value={form.longitude} required /></label>
     <div class="full loc-row">
       <button type="button" class="button secondary small" onclick={useMyLocation} disabled={locating}><Icon name="map" size={15} />{locating ? 'Locating…' : 'Use my current location'}</button>
+      {#if !editing}<button type="button" class="button secondary small" onclick={findStations} disabled={searching}><Icon name="search" size={15} />{searching ? 'Searching…' : 'Find nearby police stations'}</button>{/if}
       {#if mapLink}<a href={mapLink} target="_blank" rel="noreferrer">Check on the map ↗</a>{/if}
     </div>
+    {#if stations.length}
+      <ul class="full stations">
+        {#each stations as station (station.place_id)}
+          <li>
+            <div><strong>{station.name}</strong><small>{station.address ?? ''} · {station.distance_km} km</small></div>
+            {#if station.office_id}<span class="pill off">Added</span>{:else}<button type="button" class="button ghost small" onclick={() => useStation(station)}>Use</button>{/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
     <label class="field full">Coverage radius <small>{form.service_radius} km — reports within this distance are routed here first</small><input type="range" min="1" max="100" step="1" bind:value={form.service_radius} /></label>
   </form>
   {#snippet footer()}
@@ -149,6 +174,7 @@
   footer{display:flex;gap:.3rem;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:.7rem}.spacer{flex:1}
   .check.inline{border:0;padding:.3rem .5rem}
   .loc-row{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}.loc-row a{font-size:.88rem;font-weight:600;color:var(--blue)}
+  .stations{list-style:none;margin:0;padding:0;display:grid;gap:.35rem;max-height:220px;overflow:auto}.stations li{display:flex;justify-content:space-between;align-items:center;gap:.6rem;border:1px solid var(--line);border-radius:8px;padding:.5rem .7rem}.stations li div{display:grid;gap:.1rem;min-width:0}.stations small{color:var(--muted);font-size:.8rem}
   input[type=range]{min-height:auto;padding:0;border:0;accent-color:var(--blue)}
   .warn{display:flex;gap:.5rem;align-items:center;background:var(--amber-soft);color:#8a5100;border-radius:8px;padding:.7rem;margin:0;font-weight:600}
   @media(max-width:420px){dl{grid-template-columns:1fr 1fr}}
