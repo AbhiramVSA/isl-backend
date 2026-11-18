@@ -1,0 +1,30 @@
+services:
+  isl:
+    build:
+      context: .
+      # For a CPU-only host: build with `TORCH_INDEX=https://download.pytorch.org/whl/cpu docker compose build`
+      args:
+        TORCH_INDEX: ${TORCH_INDEX:-https://download.pytorch.org/whl/cu126}
+    image: isl-recognition-safety:latest
+    container_name: isl
+    ports:
+      - "${ISL_PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ISL_DEVICE: ${ISL_DEVICE:-auto}
+      ISL_MODELS_DIR: /app/models
+      ISL_FRONTEND_DIST: /app/frontend/dist
+      # ANTHROPIC_API_KEY and ISL_LLM_PROVIDER can be set in .env
+    volumes:
+      - ./models:/app/models          # weights persist across rebuilds (downloaded on first start)
+    shm_size: "2g"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

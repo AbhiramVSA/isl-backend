@@ -1,0 +1,16 @@
+.git
+.venv
+**/__pycache__
+**/.pytest_cache
+*.log
+.env
+frontend/node_modules
+frontend/dist
+frontend/public/mediapipe-wasm
+frontend/public/models
+models/**/*.pt
+models/**/*.pth
+models/**/*.ckpt
+models/**/*.task
+models/**/*.zip
+models/openhands/include_slgcn
