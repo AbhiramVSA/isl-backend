@@ -18,7 +18,17 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -50,6 +60,7 @@ from app.schemas_mobile import (
     StationListResponse,
     StationResponse,
 )
+from app.services.geocoding import geocode_report
 from app.services.mobile_reports import (
     PRIORITY_BY_SEVERITY,
     new_reference_code,
@@ -375,6 +386,7 @@ async def _find(db: AsyncSession, report_id: str, user_id: int) -> Report:
 async def submit_report(
     payload: ReportSubmission,
     response: Response,
+    background: BackgroundTasks,
     principal: Principal = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ) -> ReportResponse:
@@ -491,6 +503,8 @@ async def submit_report(
     await realtime_hub.office_event(
         report.office_id, {"type": "report.created", "report_id": report.public_id}
     )
+    if payload.latitude is not None and payload.longitude is not None:
+        background.add_task(geocode_report, report.public_id, latitude, longitude)
     return to_app_report(report)
 
 

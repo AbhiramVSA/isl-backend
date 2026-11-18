@@ -292,7 +292,7 @@
       <section class="panel map-card">
         <header><h2>{stale ? 'Last known location' : 'Location'}</h2>{#if stale}<span class="pill warn">Not updated recently</span>{:else if location}<span class="pill ok">Live</span>{/if}</header>
         <div class="map-wrap"><ReportMap {report} {location} /></div>
-        <p class="muted small">{report.location_label ?? `${report.initial_latitude.toFixed(5)}, ${report.initial_longitude.toFixed(5)}`}{location ? ` · updated ${relativeTime(location.recorded_at)}` : ''}</p>
+        <p class="muted small">{report.formatted_address ?? report.location_label ?? `${report.initial_latitude.toFixed(5)}, ${report.initial_longitude.toFixed(5)}`}{report.plus_code ? ` · ${report.plus_code}` : ''}{location ? ` · updated ${relativeTime(location.recorded_at)}` : ''}</p>
       </section>
 
       <section class="panel">

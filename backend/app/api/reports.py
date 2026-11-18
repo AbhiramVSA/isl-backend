@@ -1,7 +1,7 @@
 import hashlib
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.db import get_db
 from app.dependencies import Principal, require_user
 from app.models import AuditLog, Report, ReportHistory, ReportLocation, ReportMedia
 from app.schemas import LocationCreate, LocationOut, ReportCreate, ReportOut
+from app.services.geocoding import geocode_report
 from app.services.realtime import realtime_hub
 from app.services.reports import REPORT_LOAD, create_report, get_report
 
@@ -28,6 +29,7 @@ async def owned_report(db: AsyncSession, public_id: str, principal: Principal) -
 )
 async def create(
     data: ReportCreate,
+    background: BackgroundTasks,
     principal: Principal = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ) -> Report:
@@ -35,6 +37,7 @@ async def create(
     await realtime_hub.office_event(
         report.office_id, {"type": "report.created", "report_id": report.public_id}
     )
+    background.add_task(geocode_report, report.public_id, data.latitude, data.longitude)
     return report
 
 
